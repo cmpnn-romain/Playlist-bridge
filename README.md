@@ -79,6 +79,18 @@ playlist-bridge --update
 playlist-bridge --uninstall
 ```
 
+**Show all the commands and options**
+
+```bash
+playlist-bridge --help
+```
+
+**Show the installed version**
+
+```bash
+playlist-bridge --version
+```
+
 ## Credits
 
 See [AUTHORS.md](AUTHORS.md) for the complete list of contributors and the libraries.

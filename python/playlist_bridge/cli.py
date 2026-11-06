@@ -54,7 +54,7 @@ def main(argv=None):
         argv[0] = "--" + argv[0]
     p = argparse.ArgumentParser(prog="playlist-bridge")
     p.add_argument("--version", action="version", version=f"playlist-bridge {__version__}")
-    act = p.add_mutually_exclusive_group(required=True)
+    act = p.add_mutually_exclusive_group()
     for name, text in (
         ("login", "log in to YouTube Music, then to Tidal"),
         ("sync", "keep the two libraries in step, for ever (liked songs and playlists, both ways, additive only)"),
@@ -99,6 +99,9 @@ def main(argv=None):
     args = p.parse_args(argv)
     if args.reset:
         args.cmd = "reset-cooldown"
+    if not args.cmd:  # no action: show what there is to do
+        p.print_help()
+        return 0
     HOME.mkdir(parents=True, exist_ok=True)
 
     if args.cmd == "login":

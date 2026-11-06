@@ -190,14 +190,21 @@ def test_the_reason_is_the_line_that_says_what_is_wrong():
     assert upd._reason(subprocess.CalledProcessError(2, "x", stderr="")) == "exit code 2"
 
 
-def test_the_actions_are_flags_and_the_old_words_still_work(monkeypatch):
+def test_the_actions_are_flags_and_the_old_words_still_work(monkeypatch, capsys):
     from playlist_bridge import cli
     from playlist_bridge import update as upd
 
     monkeypatch.setattr(upd, "update", lambda home: 5)
     assert cli.main(["--update"]) == 5 and cli.main(["update"]) == 5  # old service files and old `update` pass the bare word
-    with pytest.raises(SystemExit):
-        cli.main([])
+    assert cli.main([]) == 0  # no action: the help, not an error
+    assert "--login" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as e:
+        cli.main(["--login", "--sync"])  # one action at a time
+    assert e.value.code == 2
+    for flag in ("--help", "--version"):
+        with pytest.raises(SystemExit) as e:
+            cli.main([flag])
+        assert e.value.code == 0
 
 
 def test_the_version_file_matches_pyproject():
