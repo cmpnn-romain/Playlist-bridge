@@ -308,6 +308,7 @@ def test_install_and_uninstall_stop_a_terminal_sync_first(tmp_path, monkeypatch)
     monkeypatch.setattr(cli, "HOME", tmp_path)
     monkeypatch.setattr(cli, "YTM_AUTH", tmp_path / "y")
     monkeypatch.setattr(cli, "TIDAL_AUTH", tmp_path / "t")
+    monkeypatch.delenv("INVOCATION_ID", raising=False)  # set under systemd (and on CI runners): it would force the foreground
     (tmp_path / "y").write_text("x")
     (tmp_path / "t").write_text("x")
     monkeypatch.setattr(cli, "stop_running", lambda home, **kw: calls.append("install"))

@@ -87,6 +87,7 @@ def test_cli_install_needs_both_logins_first(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "HOME", tmp_path)
     monkeypatch.setattr(cli, "YTM_AUTH", tmp_path / "ytm.json")
     monkeypatch.setattr(cli, "TIDAL_AUTH", tmp_path / "tidal.json")
+    monkeypatch.delenv("INVOCATION_ID", raising=False)  # set under systemd (and on CI runners): it would force the foreground
     assert cli.main(["--install"]) == EXIT_LOGIN
     assert "playlist-bridge --login" in capsys.readouterr().err
 
