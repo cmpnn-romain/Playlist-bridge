@@ -111,6 +111,6 @@ def update(
         else:
             (stop_run or stop_running)(home, say=say)  # nothing to restart: a sync left running in a terminal is the old code
     except (subprocess.CalledProcessError, SystemExit) as e:
-        say(f"Updated, but the background sync could not be restarted: {e}. Run `playlist-bridge --install` to fix it.")
+        say(f"Updated, but the background sync could not be restarted: {e}. Run `playlist-bridge --sync` to fix it.")
         return 1
     return 0

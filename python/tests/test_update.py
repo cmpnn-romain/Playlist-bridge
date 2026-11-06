@@ -135,7 +135,7 @@ def test_the_background_service_moves_to_the_new_version(tmp_path):
     assert code == 0
     assert run.kinds()[-2:] == ["service-install", "systemctl restart " + autostart.UNIT]
     install = next(c for c in run.calls if "playlist_bridge" in c)
-    assert install == ["/venv/bin/python", "-m", "playlist_bridge", "--install"]  # the NEW code writes the new unit
+    assert install == ["/venv/bin/python", "-m", "playlist_bridge", "--sync"]  # the NEW code writes the new unit
     assert any("background sync was restarted" in m for m in said)
 
 
@@ -157,7 +157,7 @@ def test_a_service_that_cannot_restart_is_reported_but_the_update_stays(tmp_path
     autostart.install(python="/venv/bin/python", directory=tmp_path / "units", run=Runner(), say=lambda m: None)
     code, said, _ = go(tmp_path, run=Runner(install_fails=True))
     assert code == 1 and (tmp_path / COMMIT_FILE).exists()
-    assert any("could not be restarted" in m and "playlist-bridge --install" in m for m in said)
+    assert any("could not be restarted" in m and "playlist-bridge --sync" in m for m in said)
 
 
 def test_checkout_detection():
@@ -312,10 +312,83 @@ def test_install_and_uninstall_stop_a_terminal_sync_first(tmp_path, monkeypatch)
     (tmp_path / "t").write_text("x")
     monkeypatch.setattr(cli, "stop_running", lambda home, **kw: calls.append("install"))
     monkeypatch.setattr(autostart, "install", lambda **kw: None)
-    assert cli.main(["--install"]) == 0 and calls == ["install"]
+    assert cli.main(["--sync"]) == 0 and calls == ["install"]
 
     from playlist_bridge import uninstall as un
 
     monkeypatch.setattr(un, "stop_running", lambda home, **kw: calls.append("uninstall"))
     uninstall(tmp_path, yes=True, run=lambda *a, **k: subprocess.CompletedProcess(a, 0), say=lambda m: None, unit_directory=tmp_path / "u")
     assert calls == ["install", "uninstall"]
+
+
+# ---------- --sync: background by default, --foreground in the terminal ----------
+def _cli_home(tmp_path, monkeypatch, logged_in=True):
+    from playlist_bridge import autostart
+
+    monkeypatch.setattr(cli, "HOME", tmp_path)
+    monkeypatch.setattr(cli, "YTM_AUTH", tmp_path / "y")
+    monkeypatch.setattr(cli, "TIDAL_AUTH", tmp_path / "t")
+    monkeypatch.setattr(cli, "DB_PATH", tmp_path / "db")
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    if logged_in:
+        (tmp_path / "y").write_text("x")
+        (tmp_path / "t").write_text("x")
+    installed, ran = [], []
+    monkeypatch.setattr(cli, "stop_running", lambda home, **kw: None)
+    monkeypatch.setattr(autostart, "install", lambda **kw: installed.append(kw))
+    monkeypatch.setattr(cli, "run_forever", lambda *a, **kw: ran.append(kw) or 0)
+    return installed, ran
+
+
+def test_sync_runs_in_the_background_by_default(tmp_path, monkeypatch):
+    installed, ran = _cli_home(tmp_path, monkeypatch)
+    assert cli.main(["--sync"]) == 0 and len(installed) == 1 and not ran
+    assert installed[0]["args"] == ()
+
+
+def test_the_old_install_name_still_sets_up_the_background_sync(tmp_path, monkeypatch):
+    installed, ran = _cli_home(tmp_path, monkeypatch)
+    assert cli.main(["--install"]) == 0 and cli.main(["install"]) == 0 and len(installed) == 2 and not ran
+
+
+def test_options_are_passed_on_to_the_background_sync(tmp_path, monkeypatch):
+    installed, _ = _cli_home(tmp_path, monkeypatch)
+    cli.main(["--sync", "--interval-hours", "12", "--allow-approx"])
+    assert installed[0]["args"] == ("--interval-hours", "12", "--allow-approx")
+
+
+def test_foreground_once_and_the_service_itself_run_here(tmp_path, monkeypatch):
+    installed, ran = _cli_home(tmp_path, monkeypatch)
+    cli.main(["--sync", "--foreground"])
+    cli.main(["--sync", "--once"])
+    monkeypatch.setenv("INVOCATION_ID", "abc")  # what systemd sets: an old unit runs a bare --sync
+    cli.main(["--sync"])
+    assert not installed and len(ran) == 3
+
+
+def test_without_systemd_it_runs_in_the_terminal_and_says_so(tmp_path, monkeypatch, capsys):
+    from playlist_bridge import autostart
+
+    installed, ran = _cli_home(tmp_path, monkeypatch)
+
+    def no_systemd(**kw):
+        raise SystemExit("systemctl not found")
+
+    monkeypatch.setattr(autostart, "install", no_systemd)
+    cli.main(["--sync"])
+    out = capsys.readouterr()
+    assert len(ran) == 1 and "systemctl not found" in out.err and "this terminal" in out.out
+
+
+def test_the_background_sync_needs_the_logins_first(tmp_path, monkeypatch, capsys):
+    from playlist_bridge.guard import EXIT_LOGIN
+
+    installed, ran = _cli_home(tmp_path, monkeypatch, logged_in=False)
+    assert cli.main(["--sync"]) == EXIT_LOGIN and not installed and not ran
+    assert "--login" in capsys.readouterr().err
+
+
+def test_install_is_hidden_from_the_help(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert "--install" not in capsys.readouterr().out

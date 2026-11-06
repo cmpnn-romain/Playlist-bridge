@@ -49,19 +49,19 @@ pipx install "git+https://github.com/cmpnn-romain/Playlist-bridge.git#subdirecto
 playlist-bridge --login
 ```
 
-**Keep both libraries in step, for ever (Ctrl+C stops it)**
+**Keep both libraries in step, for ever: in the background and at every login (Linux, systemd)**
 
 ```bash
 playlist-bridge --sync
 ```
 
-**Sync in the background, and at every login (Linux, systemd)**
+**The same, in this terminal instead (Ctrl+C stops it)**
 
 ```bash
-playlist-bridge --install
+playlist-bridge --sync --foreground
 ```
 
-**Stop the background sync (`--install` turns it on again)**
+**Stop the background sync (`--sync` turns it on again)**
 
 ```bash
 playlist-bridge --stop

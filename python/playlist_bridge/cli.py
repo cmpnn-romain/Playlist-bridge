@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import signal
 import sys
 import time
@@ -57,17 +58,20 @@ def main(argv=None):
     act = p.add_mutually_exclusive_group()
     for name, text in (
         ("login", "log in to YouTube Music, then to Tidal"),
-        ("sync", "keep the two libraries in step, for ever (liked songs and playlists, both ways, additive only)"),
-        ("install", "run --sync in the background, now and at every login (Linux, systemd)"),
+        ("sync", "keep the two libraries in step, for ever, in the background and at every login (Linux, systemd)"),
         ("stop", "stop the background sync, and do not start it at login"),
         ("update", "install the latest version from GitHub"),
         ("uninstall", "remove everything: the background sync, your logins and data, and the program itself"),
     ):
         act.add_argument(f"--{name}", dest="cmd", action="store_const", const=name, help=text)
+    act.add_argument("--install", dest="cmd", action="store_const", const="sync", help=argparse.SUPPRESS)  # the old name of --sync
     act.add_argument(
         "--reset-cooldown", dest="reset", choices=["ytm", "tidal"], metavar="{ytm,tidal}", help="clear a rate-limit cooldown early"
     )
     sy = p
+    sy.add_argument(
+        "--foreground", action="store_true", help="with --sync: run in this terminal instead of the background (Ctrl+C stops it)"
+    )
     sy.add_argument("--yes", "-y", action="store_true", help="with --uninstall: do not ask for confirmation")
     sy.add_argument(
         "--interval-hours",
@@ -118,18 +122,30 @@ def main(argv=None):
         from .uninstall import uninstall
 
         return uninstall(HOME, yes=args.yes)
-    if args.cmd in ("install", "stop"):
+    if args.cmd == "stop":
         from . import autostart
 
-        if args.cmd == "stop":
-            autostart.stop()
-        elif not (YTM_AUTH.exists() and TIDAL_AUTH.exists()):
+        autostart.stop()
+        return 0
+
+    # systemd sets INVOCATION_ID: the service itself (also an old unit, which runs a bare `--sync`) must never set itself up again
+    foreground = args.foreground or args.once or args.force or "INVOCATION_ID" in os.environ
+    if args.cmd == "sync" and not foreground:
+        from . import autostart
+
+        if not (YTM_AUTH.exists() and TIDAL_AUTH.exists()):
             print("Log in first: playlist-bridge --login", file=sys.stderr)
             return EXIT_LOGIN
-        else:
-            stop_running(HOME)  # two runs cannot share the lock: a sync left in a terminal would leave the service failing
-            autostart.install(home=os.environ.get("PLAYLIST_BRIDGE_HOME"))
-        return 0
+        extra = tuple(a for a in argv if a not in ("--sync", "--install", "sync", "install"))
+        if not all(re.fullmatch(r"[\w.=+-]+", a) for a in extra):
+            p.error("these options cannot be given to the background sync")
+        stop_running(HOME)  # two runs cannot share the lock: a sync left in a terminal would leave the service failing
+        try:
+            autostart.install(home=os.environ.get("PLAYLIST_BRIDGE_HOME"), args=extra)
+            return 0
+        except SystemExit as e:
+            print(e.code, file=sys.stderr)
+            say("Running in this terminal instead (Ctrl+C stops it).")
 
     db = Database(DB_PATH)
     if args.cmd == "reset-cooldown":

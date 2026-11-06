@@ -20,7 +20,7 @@ class Recorder:
 
 def test_unit_runs_this_python_and_never_restarts_on_login_errors():
     u = autostart.unit_text("/opt/pb venv/bin/python", "/data/pb")
-    assert 'ExecStart="/opt/pb venv/bin/python" -m playlist_bridge --sync' in u
+    assert 'ExecStart="/opt/pb venv/bin/python" -m playlist_bridge --sync --foreground' in u
     assert f"RestartPreventExitStatus={EXIT_LOGIN}" in u
     assert 'Environment="PLAYLIST_BRIDGE_HOME=/data/pb"' in u
     assert "StartLimitBurst" in u  # a crash can't turn into a restart storm
@@ -42,14 +42,14 @@ def test_install_twice_is_harmless(tmp_path):
     assert len(list(tmp_path.iterdir())) == 1
 
 
-def test_stop_disables_but_keeps_the_unit_so_install_can_turn_it_on_again(tmp_path):
+def test_stop_disables_but_keeps_the_unit_so_sync_can_turn_it_on_again(tmp_path):
     run, said = Recorder(), []
     autostart.install(python="/py", directory=tmp_path, run=run, say=lambda m: None)
     run.calls.clear()
     autostart.stop(directory=tmp_path, run=run, say=said.append)
     assert run.calls == [["disable", "--now", autostart.UNIT]]
     assert (tmp_path / autostart.UNIT).exists()
-    assert "install" in said[0]
+    assert "--sync" in said[0]
 
 
 def test_stop_when_never_installed_does_nothing(tmp_path):
