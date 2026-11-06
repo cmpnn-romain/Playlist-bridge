@@ -2,6 +2,7 @@
 
 <br />
 <div align="center">
+  <img src="assets/playlist-bridge-icon.png" alt="Playlist-bridge" width="140">
   <h3 align="center">Playlist-bridge</h3>
   <p align="center">Keep your YouTube Music and Tidal playlists the same.</p>
 </div>
