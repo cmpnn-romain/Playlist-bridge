@@ -26,20 +26,22 @@ reason to block you, and you can stop it and start it again at any time.
 ### Built With
 
 * [![Python](https://img.shields.io/badge/Python-tool-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+
 ## Getting Started
 
 ### Prerequisites
 
-* Python 3.10 or newer
+* Python 3.10 or newer, [pipx](https://pipx.pypa.io/) and git
 * A YouTube Music account and a Tidal account
 
 ### Installation
 
-Download the latest `playlist_bridge-X.Y.Z-py3-none-any.whl` from the [Releases](https://github.com/cmpnn-romain/Playlist-bridge/releases) page and install it:
-
 ```bash
-pipx install playlist_bridge-X.Y.Z-py3-none-any.whl
+git clone git@github.com:cmpnn-romain/Playlist-bridge.git
+pipx install ./Playlist-bridge/python
 ```
+
+To update, from inside the cloned folder: `git pull`, then `pipx install --force ./python`.
 
 ## Usage
 
