@@ -4,29 +4,82 @@
 from __future__ import annotations
 
 import os
+import re
 import select
+import shlex
 import sys
 from pathlib import Path
 
 YTM_STEPS = """\
 Step 1 of 2: YouTube Music
 
-  1. In your browser, open https://music.youtube.com and make sure you are logged in.
-  2. Press F12 to open the developer tools, then click the "Network" tab.
-  3. Type  browse  in the filter box, then click "Library" on the page.
-  4. Right-click the first "browse" request that appears, then:
-       Chrome or Edge:  Copy > Copy request headers
-       Firefox:         Copy Value > Copy Request Headers
-  5. Come back here and paste it. Nothing will show up, on purpose: it holds your cookies.
+You do the browser part on any computer you like (it does not have to be this one, so a server or a NAS is fine).
+Only the text you copy has to reach this terminal.
+
+  1. Open https://music.youtube.com in a browser and log in to your account.
+  2. Right-click an empty part of the page and choose "Inspect". This opens the developer tools (F12 does the same).
+  3. At the top of the developer tools, click the "Network" tab.
+  4. In its "Filter" box, type  browse
+  5. On the page, click "Library" (on the left). A line named "browse" appears in the list of requests.
+  6. Right-click that "browse" line, then choose:
+       Chrome or Edge:  Copy > Copy as cURL (bash)
+       Firefox:         Copy Value > Copy as cURL
+     (Copy request headers works too. "Copy URL" does not: it is only the address.)
+  7. Click in this terminal and paste (Ctrl+Shift+V, or right-click). Nothing will show up, on purpose: it holds your cookies.
 """
 
 CTRL_D = b"\x04"
 
 
+_ANSI_C = re.compile(r"\$'((?:[^'\\]|\\.)*)'")
+
+
+def _ansi_c(m: re.Match) -> str:
+    return shlex.quote(re.sub(r"\\(['\"\\])", r"\1", m.group(1)))  # the escapes Chrome writes: \' \" \\
+
+
+def curl_to_headers(text: str) -> str:
+    """Turn a "Copy as cURL" command into the "Name: value" lines the library reads (cookies are -b). Else: unchanged."""
+    t = text.strip()
+    if not t.lower().startswith("curl"):
+        return text
+    t = re.sub(r"\\\r?\n", " ", t)  # line continuations
+    t = _ANSI_C.sub(_ansi_c, t)  # bash's $'...' quoting, which Chrome uses for values holding a quote
+    try:
+        parts = shlex.split(t)
+    except ValueError:  # an open quote: the paste is not finished
+        return text
+    lines, i = [], 0
+    while i < len(parts):
+        flag = parts[i]
+        if flag in ("-H", "--header") and i + 1 < len(parts):
+            lines.append(parts[i + 1])
+            i += 2
+        elif flag in ("-b", "--cookie") and i + 1 < len(parts):
+            lines.append("cookie: " + parts[i + 1])
+            i += 2
+        else:
+            i += 1
+    return "\n".join(lines) + "\n"
+
+
 def headers_complete(text: str) -> bool:
-    """Both headers YouTube Music needs are there (copied in one line or Chrome's key-then-value lines)."""
-    low = text.lower()
+    """Both headers YouTube Music needs are there (as a cURL command, headers on lines, or Chrome's key-then-value lines)."""
+    low = curl_to_headers(text).lower()
     return "cookie:" in low and "x-goog-authuser:" in low
+
+
+def only_an_address(text: str) -> bool:
+    t = text.strip()
+    return t.lower().startswith("http") and "\n" not in t and " " not in t
+
+
+def what_is_wrong(text: str) -> str:
+    if not text.strip():
+        return "nothing was pasted"
+    if only_an_address(text):
+        return 'that is only the request\'s address (its URL). Use "Copy as cURL" or "Copy request headers" instead'
+    return "the paste has no cookie and x-goog-authuser: copy the whole request (step 4)"
 
 
 def read_pasted(fd: int, *, idle: float = 1.0, hint_after: float = 5.0, say=print) -> str:
@@ -49,7 +102,7 @@ def read_pasted(fd: int, *, idle: float = 1.0, hint_after: float = 5.0, say=prin
             if not ready:
                 if complete:
                     break
-                say("  That is not everything yet: it must include the cookie and x-goog-authuser lines.")
+                say(f"  That is not it: {what_is_wrong(buf.decode('utf-8', 'replace'))}.")
                 say("  Paste again, or press Ctrl-D to give up.")
                 hinted = True
                 continue
@@ -87,10 +140,10 @@ def login_ytm(path: Path, *, read=None, check=None, say=print, attempts: int = 3
     say(YTM_STEPS)
     for attempt in range(1, attempts + 1):
         say("Waiting for your paste...")
-        text = read()
+        text = curl_to_headers(read())
         try:
-            if not text.strip():
-                raise ValueError("nothing was pasted")
+            if not headers_complete(text):
+                raise ValueError(what_is_wrong(text))
             old = os.umask(0o077)  # the file holds cookies: readable by you only, from the first byte
             try:
                 ytmusicapi.setup(filepath=str(path), headers_raw=text)
@@ -119,7 +172,7 @@ def login_tidal(path: Path, *, say=print, session_factory=None) -> None:
     if not url.startswith("http"):
         url = "https://" + url
     say("Step 2 of 2: Tidal\n")
-    say("  Open this link in your browser and approve the login:\n")
+    say("  Open this link in a browser on any device (your phone is fine) and approve the login:\n")
     say(f"      {url}\n")
     say(f"Waiting for you to approve it (the link works for {max(1, int(link.expires_in) // 60)} minutes)...")
     try:

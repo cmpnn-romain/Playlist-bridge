@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from playlist_bridge.login import headers_complete, login_all, login_tidal, login_ytm, read_pasted
+from playlist_bridge.login import curl_to_headers, headers_complete, login_all, login_tidal, login_ytm, read_pasted, what_is_wrong
 
 FIREFOX = (
     "POST /youtubei/v1/browse HTTP/3\nHost: music.youtube.com\nUser-Agent: Mozilla/5.0\n"
@@ -32,9 +32,12 @@ def paste(text, *, ctrl_d=False, close=False, **kw):
         os.close(w)
     said = []
     t0 = time.time()
+    failsafe = threading.Timer(8, lambda: os.write(w, b"\x04"))  # a broken reader must fail the test, not hang CI
+    failsafe.start()
     try:
         out = read_pasted(r, say=said.append, idle=0.1, hint_after=0.2, **kw)
     finally:
+        failsafe.cancel()
         os.close(r)
         if not close:
             os.close(w)
@@ -59,7 +62,7 @@ def test_an_incomplete_paste_gets_a_hint_then_waits_for_ctrl_d():
     out = read_pasted(r, say=said.append, idle=0.1, hint_after=0.2)
     os.close(r), os.close(w)
     assert out == "cookie: a\n"
-    assert any("x-goog-authuser" in m for m in said) and sum("not everything" in m for m in said) == 1  # said once
+    assert any("cookie and x-goog-authuser" in m for m in said) and sum("That is not it" in m for m in said) == 1  # said once
 
 
 def paste_in_terminal(text: str, *, idle=0.3):
@@ -116,7 +119,7 @@ def test_ytm_bad_paste_is_reported_and_retried(tmp_path):
     p, said = tmp_path / "ytm.json", []
     login_ytm(p, read=reader("", "garbage\n", FIREFOX), check=lambda x: None, say=said.append)
     text = "\n".join(said)
-    assert "nothing was pasted" in text and "missing" in text and "✓ YouTube Music" in text
+    assert "nothing was pasted" in text and "no cookie and x-goog-authuser" in text and "✓ YouTube Music" in text
     assert p.exists()
 
 
@@ -170,3 +173,73 @@ def test_login_all_goes_ytm_then_tidal(tmp_path, monkeypatch):
     said = []
     login_all(tmp_path / "a", tmp_path / "b", say=said.append)
     assert order == ["ytm", "tidal"] and "playlist-bridge sync" in said[-1]
+
+
+# ---------- "Copy as cURL" and pasting the wrong thing ----------
+CHROME_CURL = (
+    "curl 'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false' \\\n"
+    "  -H 'accept: */*' \\\n"
+    "  -H 'content-type: application/json' \\\n"
+    "  -H $'x-goog-authuser: 0' \\\n"
+    "  -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64)' \\\n"
+    "  -b $'SID=abc; __Secure-3PAPISID=xyz; NOTE=it\\'s' \\\n"
+    "  --data-raw '{\"context\":{}}'"
+)
+FIREFOX_CURL = (
+    "curl 'https://music.youtube.com/youtubei/v1/browse' -X POST -H 'User-Agent: Mozilla/5.0' "
+    "-H 'Cookie: SID=abc; __Secure-3PAPISID=xyz' -H 'X-Goog-AuthUser: 0' --data-raw '{}'"
+)
+
+
+def test_chrome_curl_becomes_header_lines():
+    h = curl_to_headers(CHROME_CURL)
+    assert "x-goog-authuser: 0" in h and "cookie: SID=abc; __Secure-3PAPISID=xyz; NOTE=it's" in h  # the quote survives
+    assert "user-agent: Mozilla/5.0 (X11; Linux x86_64)" in h
+    assert "{" not in h and "https://" not in h  # the body and the address are not headers
+    assert headers_complete(CHROME_CURL)
+
+
+def test_firefox_curl_with_a_cookie_header():
+    assert headers_complete(FIREFOX_CURL)
+    assert "Cookie: SID=abc" in curl_to_headers(FIREFOX_CURL)
+
+
+def test_an_unfinished_curl_is_not_complete_yet():
+    assert not headers_complete(CHROME_CURL[:120])  # open quote: still being pasted
+
+
+def test_header_lines_are_returned_untouched():
+    assert curl_to_headers(FIREFOX) == FIREFOX
+
+
+def test_a_curl_paste_ends_by_itself_too():
+    out, said, took = paste(CHROME_CURL)
+    assert out == CHROME_CURL and said == [] and took < 2
+
+
+def test_ytm_login_accepts_copy_as_curl(tmp_path):
+    import json
+
+    p = tmp_path / "ytm.json"
+    login_ytm(p, read=reader(CHROME_CURL), check=lambda x: None, say=lambda m: None)
+    saved = json.loads(p.read_text())
+    assert saved["cookie"].startswith("SID=abc") and saved["x-goog-authuser"] == "0"
+
+
+def test_pasting_only_the_url_is_explained(tmp_path):
+    url = "https://music.youtube.com/youtubei/v1/browse?ctoken=4qmFsgKl&type=next&prettyPrint=false"
+    assert "address" in what_is_wrong(url) and "cURL" in what_is_wrong(url)
+    said = []
+    login_ytm(tmp_path / "y.json", read=reader(url, CHROME_CURL), check=lambda x: None, say=said.append)
+    text = "\n".join(said)
+    assert "only the request's address" in text and "✓ YouTube Music" in text
+
+
+def test_a_url_in_the_terminal_gets_the_same_hint():
+    r, w = os.pipe()
+    os.write(w, b"https://music.youtube.com/youtubei/v1/browse?x=1\n")
+    said = []
+    threading.Timer(0.5, lambda: os.write(w, b"\x04")).start()
+    read_pasted(r, say=said.append, idle=0.1, hint_after=0.2)
+    os.close(r), os.close(w)
+    assert any("address" in m for m in said)
