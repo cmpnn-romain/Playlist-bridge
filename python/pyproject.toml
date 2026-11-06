@@ -1,0 +1,29 @@
+[project]
+name = "playlist-bridge"
+dynamic = ["version"] # from the repo-root VERSION file, read by setup.py
+description = "Sync playlists between YouTube Music and Tidal"
+requires-python = ">=3.10"
+license = "GPL-3.0-only"
+dependencies = ["ytmusicapi>=1.8", "tidalapi>=0.8"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "build"]
+
+[project.scripts]
+playlist-bridge = "playlist_bridge.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["playlist_bridge"]
+
+[tool.ruff]
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
