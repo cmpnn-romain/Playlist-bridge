@@ -43,13 +43,40 @@ pipx install "git+https://github.com/cmpnn-romain/Playlist-bridge.git#subdirecto
 
 ## Usage
 
+**Log in to YouTube Music, then Tidal**
+
 ```bash
-playlist-bridge --login       # YouTube Music, then Tidal
-playlist-bridge --sync        # keeps both libraries in step, for ever (Ctrl+C stops it)
-playlist-bridge --install     # the same, in the background and at every login (Linux, systemd)
-playlist-bridge --stop        # stops the background sync (`--install` turns it on again)
-playlist-bridge --update      # installs the latest version, and restarts the background sync
-playlist-bridge --uninstall   # removes everything: the background sync, your logins and data, and the program itself
+playlist-bridge --login
+```
+
+**Keep both libraries in step, for ever (Ctrl+C stops it)**
+
+```bash
+playlist-bridge --sync
+```
+
+**Sync in the background, and at every login (Linux, systemd)**
+
+```bash
+playlist-bridge --install
+```
+
+**Stop the background sync (`--install` turns it on again)**
+
+```bash
+playlist-bridge --stop
+```
+
+**Install the latest version, and restart the background sync**
+
+```bash
+playlist-bridge --update
+```
+
+**Remove everything: the background sync, your logins and data, and the program itself**
+
+```bash
+playlist-bridge --uninstall
 ```
 
 ## Credits
