@@ -76,9 +76,17 @@ def remove(*, directory: Path | None = None, run=subprocess.run):
         _systemctl(run, "daemon-reload")
 
 
+def is_active(*, run=subprocess.run) -> bool:
+    try:
+        return run(["systemctl", "--user", "is-active", "--quiet", UNIT], capture_output=True, text=True).returncode == 0
+    except OSError:
+        return False
+
+
 def refresh(*, python: str = sys.executable, directory: Path | None = None, run=subprocess.run) -> bool:
-    """After an update: if the background service is set up, rewrite its unit with the NEW code and restart it. True if it did."""
-    if not (directory or unit_dir()).joinpath(UNIT).exists():
+    """After an update: if the background service is running, rewrite its unit with the NEW code and restart it. True if it did.
+    A service you stopped stays stopped (`--install` turns it on again, and writes the new unit then)."""
+    if not (directory or unit_dir()).joinpath(UNIT).exists() or not is_active(run=run):
         return False
     run([python, "-m", "playlist_bridge", "--install"], check=True, capture_output=True, text=True)  # the new program writes the new unit
     _systemctl(run, "restart", UNIT)

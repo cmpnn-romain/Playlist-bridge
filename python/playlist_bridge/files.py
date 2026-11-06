@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import fcntl
+import os
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,14 +19,35 @@ OWN_FILES = (YTM_FILE, TIDAL_FILE, DB_FILE, f"{DB_FILE}-journal", f"{DB_FILE}-wa
 
 @contextmanager
 def run_lock(home: Path):
-    """One run at a time: parallel/overlapping runs look like a bot and double the request rate."""
-    f = open(home / LOCK_FILE, "w")
+    """One run at a time: parallel/overlapping runs look like a bot and double the request rate. The lock file holds the run's pid."""
+    f = open(home / LOCK_FILE, "a+")  # not "w": a second run must not wipe the pid of the first
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         f.close()
         raise SystemExit("Another playlist-bridge run is in progress.") from None
+    f.seek(0)
+    f.truncate()
+    f.write(f"{os.getpid()}\n")
+    f.flush()
     try:
         yield
     finally:
         f.close()
+
+
+def running_pid(home: Path) -> int | None:
+    """The pid of the run holding the lock, or None when nothing is running."""
+    try:
+        f = open(home / LOCK_FILE)
+    except OSError:
+        return None
+    with f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:  # held: a run is going
+            try:
+                return int(f.read().strip())
+            except ValueError:
+                return None
+        return None  # we got it, so nobody had it

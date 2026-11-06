@@ -1,4 +1,5 @@
 # Copyright (C) 2026 the Playlist-bridge contributors (AUTHORS.md). SPDX-License-Identifier: GPL-3.0-only
+import os
 import subprocess
 from pathlib import Path
 
@@ -66,7 +67,6 @@ def test_updates_installs_over_the_current_one_and_remembers_the_commit(tmp_path
     assert run.kinds() == ["clone", "rev-parse", "pip-redo", "pip-deps"]
     assert (tmp_path / COMMIT_FILE).read_text().strip() == COMMIT
     assert any("Updated to 0.2.0 (abc1234)" in m for m in said)
-    assert any("running in a terminal" in m for m in said)  # no background service: tell how to pick up the new version
     redo = next(c for c in run.calls if "--no-deps" in c)
     assert redo[:3] == ["/venv/bin/python", "-m", "pip"] and "--force-reinstall" in redo  # same version number: must be forced
 
@@ -139,6 +139,20 @@ def test_the_background_service_moves_to_the_new_version(tmp_path):
     assert any("background sync was restarted" in m for m in said)
 
 
+def test_a_stopped_service_stays_stopped(tmp_path):
+    autostart.install(python="/venv/bin/python", directory=tmp_path / "units", run=Runner(), say=lambda m: None)
+
+    class Stopped(Runner):
+        def __call__(self, cmd, **kw):
+            if "is-active" in cmd:
+                self.calls.append(cmd)
+                return subprocess.CompletedProcess(cmd, 3, "", "")
+            return super().__call__(cmd, **kw)
+
+    code, said, run = go(tmp_path, run=Stopped())
+    assert code == 0 and not any("playlist_bridge" in c or "restart" in c for c in run.calls)
+
+
 def test_a_service_that_cannot_restart_is_reported_but_the_update_stays(tmp_path):
     autostart.install(python="/venv/bin/python", directory=tmp_path / "units", run=Runner(), say=lambda m: None)
     code, said, _ = go(tmp_path, run=Runner(install_fails=True))
@@ -193,3 +207,36 @@ def test_the_version_file_matches_pyproject():
     root = Path(__file__).resolve().parents[2]
     declared = re.search(r'(?m)^version\s*=\s*"([^"]*)"', (root / "python" / "pyproject.toml").read_text()).group(1)
     assert (root / "VERSION").read_text().strip() == declared
+
+
+def test_a_sync_running_in_a_terminal_is_stopped_by_the_update(tmp_path):
+    from playlist_bridge.files import run_lock
+    from playlist_bridge.update import stop_running
+
+    said, sent = [], []
+    with run_lock(tmp_path):
+        assert stop_running(tmp_path, say=said.append, kill=lambda pid, sig: sent.append(pid), sleep=lambda s: None, wait=0.5)
+    assert sent == [os.getpid()] and "--sync" in said[0]
+
+
+def test_nothing_is_stopped_when_nothing_runs(tmp_path):
+    from playlist_bridge.update import stop_running
+
+    assert not stop_running(tmp_path, kill=lambda *a: pytest.fail("killed"), say=lambda m: None)
+
+
+def test_a_second_run_does_not_wipe_the_pid_of_the_first(tmp_path):
+    from playlist_bridge.files import run_lock, running_pid
+
+    with run_lock(tmp_path):
+        with pytest.raises(SystemExit):
+            with run_lock(tmp_path):
+                pass
+        assert running_pid(tmp_path) == os.getpid()
+    assert running_pid(tmp_path) is None
+
+
+def test_update_stops_a_terminal_sync_when_there_is_no_service(tmp_path):
+    calls = []
+    code, said, _ = go(tmp_path, stop_run=lambda home, say: calls.append(home) or True)
+    assert code == 0 and calls == [tmp_path]
