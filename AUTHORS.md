@@ -23,6 +23,8 @@ Not part of this repository's own code; each keeps its own license.
 | Library | Used for |
 | --- | --- |
 | requests (through ytmusicapi and tidalapi) | HTTP, and the network errors the request guard recognises |
+| rich | The login screen: boxes, colours and the waiting spinner |
+| segno | The QR code of the Tidal login link |
 | pytest | Tests |
 | ruff | Format and lint gates |
 | build, setuptools | Building the wheel |

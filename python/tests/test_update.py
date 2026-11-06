@@ -394,3 +394,16 @@ def test_the_command_line_has_only_what_the_readme_lists(capsys):
         assert flag in out
     for gone in ("--once", "--force", "--yes", "--threshold", "--interval-hours", "--reset-cooldown", "--install"):
         assert gone not in out
+
+
+def test_ctrl_c_leaves_quietly_instead_of_a_traceback(tmp_path, monkeypatch, capsys):
+    from playlist_bridge import login
+
+    monkeypatch.setattr(cli, "HOME", tmp_path)
+
+    def interrupted(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(login, "login_all", interrupted)
+    assert cli.main(["--login"]) == 130
+    assert "Cancelled" in capsys.readouterr().err

@@ -10,6 +10,8 @@ import shlex
 import sys
 from pathlib import Path
 
+from . import ui
+
 YTM_STEPS = """\
 Step 1 of 2: YouTube Music
 
@@ -82,7 +84,7 @@ def what_is_wrong(text: str) -> str:
     return "the paste has no cookie and x-goog-authuser: copy the whole request (step 4)"
 
 
-def read_pasted(fd: int, *, idle: float = 1.0, hint_after: float = 5.0, say=print) -> str:
+def read_pasted(fd: int, *, idle: float = 1.0, hint_after: float = 5.0, say=ui.say) -> str:
     """Read what the user pastes, hidden. It ends by itself once the pasted headers are complete and nothing more arrives
     (no Ctrl-D needed); Ctrl-D still ends it early. In a terminal, echo and the 4096-character line limit are switched off."""
     is_tty = os.isatty(fd)
@@ -132,7 +134,7 @@ def _check_ytm(path: Path) -> None:
     YTMusic(str(path)).get_library_playlists(limit=1)  # fails if the headers do not really log us in
 
 
-def login_ytm(path: Path, *, read=None, check=None, say=print, attempts: int = 3) -> None:
+def login_ytm(path: Path, *, read=None, check=None, say=ui.say, attempts: int = 3) -> None:
     import ytmusicapi
 
     read = read or (lambda: read_pasted(sys.stdin.fileno(), say=say))
@@ -161,7 +163,7 @@ def login_ytm(path: Path, *, read=None, check=None, say=print, attempts: int = 3
     raise SystemExit("YouTube Music login failed. Run `playlist-bridge --login` to try again.")
 
 
-def login_tidal(path: Path, *, say=print, session_factory=None) -> None:
+def login_tidal(path: Path, *, say=ui.say, session_factory=None, show_qr=ui.qr, waiting=ui.status) -> None:
     import tidalapi
 
     from .services import save_tidal_session
@@ -171,12 +173,14 @@ def login_tidal(path: Path, *, say=print, session_factory=None) -> None:
     url = link.verification_uri_complete
     if not url.startswith("http"):
         url = "https://" + url
-    say("Step 2 of 2: Tidal\n")
-    say("  Open this link in a browser on any device (your phone is fine) and approve the login:\n")
-    say(f"      {url}\n")
-    say(f"Waiting for you to approve it (the link works for {max(1, int(link.expires_in) // 60)} minutes)...")
+    say(
+        f"Step 2 of 2: Tidal\n\nOpen this link in a browser on any device (your phone is fine) and approve the login:\n\n    {url}\n\n"
+        f"The link works for {max(1, int(link.expires_in) // 60)} minutes."
+    )
+    show_qr(url)
     try:
-        future.result()
+        with waiting("Waiting for you to approve it..."):
+            future.result()
     except Exception as e:
         raise SystemExit(f"Tidal login failed: {_oneline(e)}") from None
     if not session.check_login():
@@ -185,7 +189,7 @@ def login_tidal(path: Path, *, say=print, session_factory=None) -> None:
     say("\n✓ Tidal is connected.\n")
 
 
-def login_all(ytm_path: Path, tidal_path: Path, say=print) -> None:
+def login_all(ytm_path: Path, tidal_path: Path, say=ui.say) -> None:
     say("Connecting your two accounts. You only do this once.\n")
     login_ytm(ytm_path, say=say)
     login_tidal(tidal_path, say=say)

@@ -4,7 +4,7 @@ version = "0.1.4" # the single source of truth: strict MAJOR.MINOR.PATCH (docs/V
 description = "Sync playlists between YouTube Music and Tidal"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
-dependencies = ["ytmusicapi>=1.8", "tidalapi>=0.8"]
+dependencies = ["ytmusicapi>=1.8", "tidalapi>=0.8", "rich>=13", "segno>=1.6"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "build"]

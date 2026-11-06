@@ -13,6 +13,7 @@ and release system as Unplug (`~/Unplug`, <https://github.com/cmpnn-romain/Unplu
 | `python/playlist_bridge/db.py` | SQLite state: `matches`, `synced` (the journal), `playlists`, `usage`, `cooldown` |
 | `python/playlist_bridge/services.py` | `Service` protocol; the ytmusicapi and tidalapi adapters |
 | `python/playlist_bridge/login.py` | `login`: numbered steps, a hidden paste that ends by itself (`read_pasted`), a check that the headers really log in, the Tidal link |
+| `python/playlist_bridge/ui.py` | how `login` looks: `say` draws the plain text it is given (a titled box for "Step N of M", numbered rows, green/red results), the Tidal link as a QR code, a spinner; all of it vanishes when the output is not a terminal |
 | `python/playlist_bridge/sync.py` | `sync_once`, one pass: the liked songs (the `LIKED` pseudo-playlist), then the playlists paired by name; resolves tracks, adds in batches of 50, records each batch |
 | `python/playlist_bridge/daemon.py` | `run_forever`: a pass, then a long random wait; waits for the next UTC day after a quota stop and for the cooldown after a block; retries a crashed pass with a growing delay |
 | `python/playlist_bridge/autostart.py` | `install` / `stop` / `remove`: a systemd user service running `--sync --foreground` (plus any options given to `--sync`); never restarted after exit code 3 |
@@ -51,5 +52,6 @@ are generated from `feat`/`fix`/`perf`/`refactor` titles. See `docs/VERSIONING.m
 - Tests must stay offline: use the fakes in `python/tests/test_sync.py`, and inject `sleep` / `clock` into `Guard` so nothing really waits.
 - A song is matched on title, artist and duration, since the services share no id. Raising the default threshold loses songs, lowering it adds wrong ones.
 - `setuptools` cannot read files outside `python/`, so `readme` and `license-files` are not set in `pyproject.toml`.
+- The rest of the program only calls `say(text)` with plain text; keep it so, since the tests read that text. New shapes of message are drawn in `ui.say`.
 - The credentials files are mode 600; never log or print their contents.
 - Text files are LF; no BOM.

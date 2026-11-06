@@ -50,6 +50,14 @@ def print_report(r):
 
 
 def main(argv=None):
+    try:
+        return _main(argv)
+    except (KeyboardInterrupt, EOFError):  # Ctrl+C (or Ctrl+D at a question): leave quietly, whatever was being waited for
+        print("\nCancelled.", file=sys.stderr)
+        return 130
+
+
+def _main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in LEGACY:  # `playlist-bridge --sync` (old units, old `update`) still works
         argv[0] = "--" + argv[0]
