@@ -184,3 +184,12 @@ def test_the_actions_are_flags_and_the_old_words_still_work(monkeypatch):
     assert cli.main(["--update"]) == 5 and cli.main(["update"]) == 5  # old service files and old `update` pass the bare word
     with pytest.raises(SystemExit):
         cli.main([])
+
+
+def test_the_version_file_matches_pyproject():
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    declared = re.search(r'(?m)^version\s*=\s*"([^"]*)"', (root / "python" / "pyproject.toml").read_text()).group(1)
+    assert (root / "VERSION").read_text().strip() == declared

@@ -4,7 +4,7 @@ Playlist-bridge follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0
 
 ## The one source of truth
 
-The `version = "MAJOR.MINOR.PATCH"` line of `python/pyproject.toml` holds the release number.
+The `VERSION` file at the root holds the release number. The `version = "MAJOR.MINOR.PATCH"` line of `python/pyproject.toml` must say the same (setuptools cannot read a file outside `python/`); a test and `tools/Test-VersionPolicy.ps1` fail when they differ.
 The build stamps it into the wheel's name and metadata; builds never write it. Do not hardcode a version anywhere else.
 
 ## Format
@@ -28,7 +28,7 @@ A bump increases exactly one component and resets the ones to its right to `0`. 
 
 Releases are cut by CI from a tag. Do not build or upload the wheel by hand.
 
-1. Edit `version` in `python/pyproject.toml` (one valid bump of the latest release) and merge it to `main` with the title `chore: version X.Y.Z`.
+1. Edit `VERSION` and `version` in `python/pyproject.toml` (one valid bump of the latest release) and merge it to `main` with the title `chore: version X.Y.Z`.
 2. Tag that commit `X.Y.Z` (bare version, no `v`) and push the tag.
 3. `.github/workflows/release.yml` checks the tag is on `main`, equals that version and is a valid bump, runs every gate (format, lints, tests),
    builds `playlist_bridge-X.Y.Z-py3-none-any.whl` and publishes the release. The notes are the changelog only, generated from the `feat` / `fix` / `perf` /

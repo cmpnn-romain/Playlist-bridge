@@ -3,7 +3,7 @@
     Enforces the Playlist-bridge versioning policy (docs/VERSIONING.md). Used by CI and runnable locally.
 
 .DESCRIPTION
-    Always: the version in python/pyproject.toml is strict MAJOR.MINOR.PATCH.
+    Always: the version in python/pyproject.toml is strict MAJOR.MINOR.PATCH and equals the VERSION file.
     Against the latest release tag: the version is either unchanged or exactly one valid bump
     (one component up, everything to its right reset to 0) of the latest tag.
     With -Tag (a release): the tag is the bare version, equals the version, and is greater than every existing release tag.
@@ -20,6 +20,8 @@ $pyproject = Get-Content (Join-Path $root "python/pyproject.toml") -Raw
 if ($pyproject -notmatch '(?m)^version\s*=\s*"([^"]*)"') { Fail "no version in python/pyproject.toml" }
 $version = $Matches[1]
 if ($version -cnotmatch $strict) { Fail "version '$version' is not strict MAJOR.MINOR.PATCH" }
+$versionFile = (Get-Content (Join-Path $root "VERSION") -Raw).Trim()
+if ($versionFile -ne $version) { Fail "VERSION says '$versionFile' but python/pyproject.toml says '$version': they must match" }
 
 $tags = @(& git -C $root tag --list | Where-Object { $_ -cmatch $strict -and $_ -ne $Tag } |
     Sort-Object { [version]$_ })

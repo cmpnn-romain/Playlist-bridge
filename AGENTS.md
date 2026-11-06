@@ -33,7 +33,7 @@ cd python && python -m pip install -e ".[dev]" && ruff format --check . && ruff 
 
 ## Releases and versions
 
-The `version` in `python/pyproject.toml` is the single source of truth (strict `MAJOR.MINOR.PATCH`). Tag `X.Y.Z` on `main` and push the tag; CI
+The `VERSION` file and the `version` in `python/pyproject.toml` hold the release number (strict `MAJOR.MINOR.PATCH`) and must match: change both together. Tag `X.Y.Z` on `main` and push the tag; CI
 builds and publishes `playlist_bridge-X.Y.Z-py3-none-any.whl`. Do not upload by hand. Commits follow Conventional Commits; the release notes
 are generated from `feat`/`fix`/`perf`/`refactor` titles. See `docs/VERSIONING.md`.
 

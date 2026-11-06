@@ -52,11 +52,6 @@ playlist-bridge --update      # installs the latest version, and restarts the ba
 playlist-bridge --uninstall   # removes everything: the background sync, your logins and data, and the program itself
 ```
 
-- Your liked songs and playlists (paired by name) are synced both ways. Songs are only added, never removed, and a song you removed is not added back.
-- It syncs every 6 hours or so, slowly and at random times, and waits out any limit or block by itself. If a login stops working, run `playlist-bridge --login` again.
-- Songs with no confident match are reported once, never guessed.
-- On a server or NAS, run `playlist-bridge --login` over SSH: the YouTube Music request is copied from a browser on any other device, and the Tidal link is approved on any other device.
-
 ## Credits
 
 See [AUTHORS.md](AUTHORS.md) for the complete list of contributors and the libraries.
