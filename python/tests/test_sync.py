@@ -409,3 +409,11 @@ def test_missing_is_reported_once_not_every_pass(tmp_path):
     db = Database(tmp_path / "d.db")
     assert len(run(a, b, db).missing) == 1
     assert run(a, b, db).missing == []  # cached: a daemon must not repeat the same line forever
+
+
+def test_progress_is_logged_while_a_pass_runs():
+    lines = []
+    a, b = world()
+    sync_once(a, b, Database(":memory:"), log=lines.append)
+    assert any("Reading your playlists" in m for m in lines) and any("Found 2 on YouTube Music and 1 on Tidal" in m for m in lines)
+    assert "• Liked songs" in lines and "• Mix" in lines and "• OnlyA" in lines

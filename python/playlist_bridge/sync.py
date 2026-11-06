@@ -131,7 +131,9 @@ def sync_once(a: Service, b: Service, db: Database, opt: Options | None = None, 
     opt = opt or Options()
     report = Report()
     try:
+        log("Reading your playlists on both services (slow on purpose, to stay under the limits)...")
         pa, pb = a.playlists(), b.playlists()
+        log(f"Found {len(pa)} on YouTube Music and {len(pb)} on Tidal.")
         by_a = {k.casefold(): (k, v) for k, v in pa.items()}
         by_b = {k.casefold(): (k, v) for k, v in pb.items()}
         entries = [(LIKED, "Liked songs", LIKED, LIKED)]  # the library first, then the playlists
@@ -139,7 +141,7 @@ def sync_once(a: Service, b: Service, db: Database, opt: Options | None = None, 
             title = (by_a.get(n) or by_b.get(n))[0]
             entries.append((n, title, by_a.get(n, (None, None))[1], by_b.get(n, (None, None))[1]))
         for key, title, ida, idb in entries:
-            log(f"• {title}")
+            log(f"• {title}")  # the liked songs, then each playlist: a first pass takes a while
             try:
                 if key != LIKED:
                     db.upsert_playlist(key, title, ida, idb)

@@ -127,7 +127,7 @@ def _main(argv=None):
 
     def cycle():
         # rebuilt each time, so a refreshed login is picked up and a stale session never lingers
-        return sync_once(YTMusic(YTM_AUTH, g_ytm), Tidal(TIDAL_AUTH, g_tidal), db, opt)
+        return sync_once(YTMusic(YTM_AUTH, g_ytm), Tidal(TIDAL_AUTH, g_tidal), db, opt, log=say)
 
     def stop(*_):
         raise KeyboardInterrupt
