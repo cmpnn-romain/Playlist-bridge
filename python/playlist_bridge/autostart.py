@@ -74,3 +74,12 @@ def remove(*, directory: Path | None = None, run=subprocess.run):
         _systemctl(run, "disable", "--now", UNIT)
         path.unlink()
         _systemctl(run, "daemon-reload")
+
+
+def refresh(*, python: str = sys.executable, directory: Path | None = None, run=subprocess.run) -> bool:
+    """After an update: if the background service is set up, rewrite its unit with the NEW code and restart it. True if it did."""
+    if not (directory or unit_dir()).joinpath(UNIT).exists():
+        return False
+    run([python, "-m", "playlist_bridge", "install"], check=True, capture_output=True, text=True)  # the new program writes the new unit
+    _systemctl(run, "restart", UNIT)
+    return True

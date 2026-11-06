@@ -11,8 +11,9 @@ YTM_FILE = "ytm_headers.json"
 TIDAL_FILE = "tidal_session.json"
 DB_FILE = "playlist-bridge.db"
 LOCK_FILE = "lock"
+COMMIT_FILE = "installed-commit"  # the commit `update` last installed
 # the database may leave SQLite's side files next to it
-OWN_FILES = (YTM_FILE, TIDAL_FILE, DB_FILE, f"{DB_FILE}-journal", f"{DB_FILE}-wal", f"{DB_FILE}-shm", LOCK_FILE)
+OWN_FILES = (YTM_FILE, TIDAL_FILE, DB_FILE, f"{DB_FILE}-journal", f"{DB_FILE}-wal", f"{DB_FILE}-shm", LOCK_FILE, COMMIT_FILE)
 
 
 @contextmanager

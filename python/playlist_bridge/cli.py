@@ -83,6 +83,7 @@ def main(argv=None):
     sy.add_argument("--min-interval", type=float, default=1.2, help="minimum seconds between requests, plus random jitter (default 1.2)")
 
     sub.add_parser("install", help="run sync in the background, now and at every login (Linux, systemd)")
+    sub.add_parser("update", help="install the latest version from GitHub")
     sub.add_parser("stop", help="stop the background sync, and do not start it at login")
     un = sub.add_parser("uninstall", help="remove everything: the background sync, your logins and data, and the program itself")
     un.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
@@ -99,6 +100,10 @@ def main(argv=None):
         login_all(YTM_AUTH, TIDAL_AUTH)
         return 0
 
+    if args.cmd == "update":
+        from .update import update
+
+        return update(HOME)
     if args.cmd == "uninstall":
         from .uninstall import uninstall
 
