@@ -82,9 +82,6 @@ class Database:
                 (dst, src_key, label, dst_id, score, status, self.clock()),
             )
 
-    def missing(self):
-        return self.conn.execute("SELECT dst, src_label, checked_at FROM matches WHERE status='missing' ORDER BY src_label").fetchall()
-
     def match_counts(self) -> dict[str, int]:
         return dict(self.conn.execute("SELECT status, COUNT(*) FROM matches GROUP BY status").fetchall())
 

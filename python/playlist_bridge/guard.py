@@ -132,7 +132,7 @@ class Guard:
             except Exception as e:
                 st = http_status(e)
                 if st == 401:
-                    raise AuthExpired(f"{self.service}: credentials rejected. Run `playlist-bridge login {self.service}`.") from e
+                    raise AuthExpired(f"{self.service}: credentials rejected. Run `playlist-bridge login`.") from e
                 throttled = st in (429, 403)
                 transient = throttled or (st is not None and st >= 500) or is_network_error(e)
                 if not transient:

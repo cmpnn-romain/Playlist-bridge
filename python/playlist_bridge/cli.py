@@ -4,15 +4,17 @@ from __future__ import annotations
 import argparse
 import fcntl
 import os
+import signal
 import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
 from . import __version__
+from .daemon import MIN_INTERVAL_HOURS, run_forever
 from .db import Database
 from .guard import Guard
-from .sync import Options, sync_playlists
+from .sync import Options, sync_once
 
 HOME = Path(os.environ.get("PLAYLIST_BRIDGE_HOME", Path.home() / ".config" / "playlist-bridge"))
 YTM_AUTH = HOME / "ytm_headers.json"
@@ -38,7 +40,11 @@ def _ts(t):
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "-"
 
 
-def cmd_status(db: Database, show_missing: bool):
+def say(msg: str):
+    print(f"[{_ts(time.time())}] {msg}", flush=True)
+
+
+def cmd_status(db: Database):
     print("Requests used today:", {s: db.usage(s) for s in ("ytm", "tidal")})
     for s in ("ytm", "tidal"):
         cd = db.cooldown(s)
@@ -47,10 +53,24 @@ def cmd_status(db: Database, show_missing: bool):
     print("Matches:", db.match_counts() or "none yet")
     for started, finished, summary in db.last_runs():
         print(f"  run {_ts(started)} -> {_ts(finished)}: {summary}")
-    if show_missing:
-        print("\nTracks not found on the other service:")
-        for dst, label, at in db.missing():
-            print(f"  [{dst}] {label}  (checked {_ts(at)})")
+
+
+def print_report(r):
+    if r.added:
+        for k, n in r.added.items():
+            say(f"Added {n} track(s): {k}")
+    else:
+        say("Everything is in sync.")
+    if r.skipped_removed:
+        say(f"Skipped {r.skipped_removed} track(s) synced before and removed since (--force with --once adds them back).")
+    for u in r.approx:
+        say(f"Different version of the song: {u}")
+    for u in r.missing:
+        say(f"No confident match (not in the catalogue, region-locked, or titled differently): {u}")
+    for e in r.errors:
+        say(f"Error: {e}")
+    if r.stopped:
+        say(f"Stopped early: {r.stopped}")
 
 
 def main(argv=None):
@@ -58,17 +78,21 @@ def main(argv=None):
     p.add_argument("--version", action="version", version=f"playlist-bridge {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    lg = sub.add_parser("login", help="authenticate a service")
-    lg.add_argument("service", choices=["ytm", "tidal"])
+    sub.add_parser("login", help="log in to YouTube Music, then to Tidal")
 
-    sy = sub.add_parser("sync", help="sync playlists both ways (additive only)")
-    sy.add_argument("--playlist", "-p", action="append", help="limit to this name (repeatable)")
+    sy = sub.add_parser("sync", help="keep the two libraries in step, for ever (liked songs and playlists, both ways, additive only)")
+    sy.add_argument(
+        "--interval-hours",
+        type=float,
+        default=6.0,
+        help=f"about this long between syncs (default 6, at least {MIN_INTERVAL_HOURS:g}; randomised)",
+    )
+    sy.add_argument("--once", action="store_true", help="sync once and exit (for cron)")
     sy.add_argument("--threshold", type=float, default=0.8, help="match score 0-1 (default 0.8)")
     sy.add_argument(
         "--allow-approx", action="store_true", help="accept a different recording (live/remix/...) when the studio one is missing"
     )
-    sy.add_argument("--dry-run", "-n", action="store_true", help="search & report, add nothing (still uses quota)")
-    sy.add_argument("--force", action="store_true", help="ignore the journal; re-add tracks removed on purpose")
+    sy.add_argument("--force", action="store_true", help="with --once: ignore the journal and re-add tracks removed on purpose")
     sy.add_argument("--retry-missing-days", type=float, default=14)
     sy.add_argument(
         "--ytm-quota",
@@ -84,8 +108,7 @@ def main(argv=None):
     )
     sy.add_argument("--min-interval", type=float, default=1.2, help="minimum seconds between requests, plus random jitter (default 1.2)")
 
-    st = sub.add_parser("status", help="request budget, cooldowns, match stats")
-    st.add_argument("--missing", action="store_true", help="list tracks with no match")
+    sub.add_parser("status", help="request budget, cooldowns, match stats")
 
     rc = sub.add_parser("reset-cooldown", help="clear a rate-limit cooldown early")
     rc.add_argument("service", choices=["ytm", "tidal"])
@@ -96,55 +119,46 @@ def main(argv=None):
     if args.cmd == "login":
         from .services import login_tidal, login_ytm
 
-        login_ytm(YTM_AUTH) if args.service == "ytm" else login_tidal(TIDAL_AUTH)
+        print("1/2  YouTube Music")
+        login_ytm(YTM_AUTH)
+        print("\n2/2  Tidal")
+        login_tidal(TIDAL_AUTH)
+        print("\nLogged in to both. Now run: playlist-bridge sync")
         return 0
 
     db = Database(DB_PATH)
     if args.cmd == "status":
-        cmd_status(db, args.missing)
+        cmd_status(db)
         return 0
     if args.cmd == "reset-cooldown":
         db.clear_cooldown(args.service)
         return 0
 
+    if args.force and not args.once:
+        p.error("--force only makes sense with --once (it would re-add removed tracks at every sync)")
+
     from .services import Tidal, YTMusic
 
-    with run_lock():
-        mk = lambda name, q: Guard(name, db, daily_quota=q, min_interval=args.min_interval)  # noqa: E731
-        try:
-            ytm = YTMusic(YTM_AUTH, mk("ytm", args.ytm_quota))
-            tidal = Tidal(TIDAL_AUTH, mk("tidal", args.tidal_quota))
-        except Exception as e:
-            print(f"Setup failed: {e}", file=sys.stderr)
-            return 1
-        opt = Options(args.threshold, args.allow_approx, args.retry_missing_days, args.dry_run, args.force, args.playlist)
-        try:
-            r = sync_playlists(ytm, tidal, db, opt)
-        except KeyboardInterrupt:
-            print("\nInterrupted. Progress is saved; re-run to resume.")
-            return 130
+    opt = Options(args.threshold, args.allow_approx, args.retry_missing_days, args.force)
+    g_ytm = Guard("ytm", db, daily_quota=args.ytm_quota, min_interval=args.min_interval)
+    g_tidal = Guard("tidal", db, daily_quota=args.tidal_quota, min_interval=args.min_interval)
 
-    verb = "Would add" if args.dry_run else "Added"
-    print()
-    for k, n in r.added.items():
-        print(f"{verb} {n} track(s): {k}")
-    if not r.added:
-        print("Everything already in sync.")
-    if r.skipped_removed:
-        print(f"Skipped {r.skipped_removed} track(s) previously synced then removed (use --force to re-add).")
-    if r.approx:
-        print(f"\n{len(r.approx)} added as a different version of the song:")
-        print("\n".join(f"  {u}" for u in r.approx))
-    if r.missing:
-        print(f"\n{len(r.missing)} track(s) with no confident match (not in catalogue, region-locked, or differently titled):")
-        print("\n".join(f"  {u}" for u in r.missing))
-    if r.errors:
-        print("\nErrors:")
-        print("\n".join(f"  {e}" for e in r.errors))
-    if r.stopped:
-        print(f"\nSTOPPED EARLY: {r.stopped}")
-        return 2
-    return 0
+    def cycle():
+        # rebuilt each time, so a refreshed login is picked up and a stale session never lingers
+        return sync_once(YTMusic(YTM_AUTH, g_ytm), Tidal(TIDAL_AUTH, g_tidal), db, opt)
+
+    def stop(*_):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, stop)
+    with run_lock():
+        hours = max(args.interval_hours, MIN_INTERVAL_HOURS)
+        say(f"Playlist-bridge {__version__}: syncing about every {hours:g} h. Ctrl+C stops; progress is saved.")
+        try:
+            return run_forever(cycle, db, interval_hours=args.interval_hours, once=args.once, on_report=print_report, log=say)
+        except KeyboardInterrupt:
+            say("Stopped. Progress is saved; run it again to resume.")
+            return 130
 
 
 if __name__ == "__main__":

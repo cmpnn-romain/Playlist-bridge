@@ -7,8 +7,20 @@ import json
 from pathlib import Path
 from typing import Protocol
 
+try:
+    from ytmusicapi.models.content.enums import LikeStatus
+except ImportError:  # older ytmusicapi: the rating is the plain string
+
+    class LikeStatus:
+        LIKE = "LIKE"
+
+
 from .guard import Guard
 from .matching import Track
+
+# Pseudo-playlist id for the user's liked songs (YouTube Music "Liked Music", Tidal favourites): synced like any playlist.
+LIKED = "library:liked"
+_YTM_SYSTEM_PLAYLISTS = {"LM", "SE"}  # "Your Likes" and "Episodes for later" are not playlists to copy
 
 
 class Service(Protocol):
@@ -28,7 +40,7 @@ class YTMusic:
         from ytmusicapi import YTMusic as _YTM
 
         if not auth_file.exists():
-            raise SystemExit(f"{auth_file} not found. Run `playlist-bridge login ytm` first.")
+            raise SystemExit(f"{auth_file} not found. Run `playlist-bridge login` first.")
         self.api, self.g = _YTM(str(auth_file)), guard
 
     @staticmethod
@@ -46,10 +58,13 @@ class YTMusic:
 
     def playlists(self) -> dict[str, str]:
         res = self.g.call(self.api.get_library_playlists, limit=None, cost=3)
-        return {p["title"]: p["playlistId"] for p in res}
+        return {p["title"]: p["playlistId"] for p in res if p.get("playlistId") not in _YTM_SYSTEM_PLAYLISTS}
 
     def tracks(self, playlist_id: str) -> list[Track]:
-        data = self.g.call(self.api.get_playlist, playlist_id, limit=None, cost=5)
+        if playlist_id == LIKED:
+            data = self.g.call(self.api.get_liked_songs, limit=None, cost=5)
+        else:
+            data = self.g.call(self.api.get_playlist, playlist_id, limit=None, cost=5)
         return [self._conv(t) for t in data.get("tracks", []) if t.get("videoId")]
 
     def search(self, query: str) -> list[Track]:
@@ -63,6 +78,10 @@ class YTMusic:
         return res
 
     def add(self, playlist_id: str, track_ids: list[str]) -> None:
+        if playlist_id == LIKED:  # one request per song: there is no bulk like
+            for video_id in track_ids:
+                self.g.call(self.api.rate_song, video_id, LikeStatus.LIKE)
+            return
         self.g.call(self.api.add_playlist_items, playlist_id, track_ids, duplicates=False)
 
 
@@ -75,10 +94,10 @@ class Tidal:
         self.tidalapi, self.g = tidalapi, guard
         self.session = tidalapi.Session()
         if not auth_file.exists():
-            raise SystemExit(f"{auth_file} not found. Run `playlist-bridge login tidal` first.")
+            raise SystemExit(f"{auth_file} not found. Run `playlist-bridge login` first.")
         d = json.loads(auth_file.read_text())
         if not self.session.load_oauth_session(d["token_type"], d["access_token"], d.get("refresh_token")):
-            raise SystemExit("Tidal session expired. Run `playlist-bridge login tidal`.")
+            raise SystemExit("Tidal session expired. Run `playlist-bridge login`.")
         save_tidal_session(self.session, auth_file)  # persist refreshed token
 
     @staticmethod
@@ -99,15 +118,19 @@ class Tidal:
     def playlists(self) -> dict[str, str]:
         return {p.name: p.id for p in self.g.call(self.session.user.playlists, cost=3)}
 
-    def tracks(self, playlist_id: str) -> list[Track]:
-        pl = self.g.call(self.session.playlist, playlist_id)
+    def _all(self, fetch_page) -> list[Track]:
         out, offset = [], 0
         while True:
-            page = self.g.call(pl.tracks, limit=100, offset=offset)
+            page = self.g.call(fetch_page, limit=100, offset=offset)
             out += [self._conv(t) for t in page]
             if len(page) < 100:
                 return out
             offset += 100
+
+    def tracks(self, playlist_id: str) -> list[Track]:
+        if playlist_id == LIKED:
+            return self._all(self.session.user.favorites.tracks)
+        return self._all(self.g.call(self.session.playlist, playlist_id).tracks)
 
     def search(self, query: str) -> list[Track]:
         res = self.g.call(self.session.search, query, models=[self.tidalapi.media.Track], limit=8)
@@ -117,6 +140,9 @@ class Tidal:
         return self.g.call(self.session.user.create_playlist, title, "Synced by playlist-bridge").id
 
     def add(self, playlist_id: str, track_ids: list[str]) -> None:
+        if playlist_id == LIKED:
+            self.g.call(self.session.user.favorites.add_track, track_ids)
+            return
         pl = self.g.call(self.session.playlist, playlist_id)
         self.g.call(pl.add, track_ids)
 

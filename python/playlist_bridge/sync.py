@@ -1,8 +1,8 @@
 # Copyright (C) 2026 the Playlist-bridge contributors (AUTHORS.md). SPDX-License-Identifier: GPL-3.0-only
-"""Bidirectional, additive, idempotent and resumable playlist sync.
+"""One bidirectional, additive, idempotent and resumable pass over the library: the liked songs, then every playlist.
 
 Idempotency comes from three layers:
-  1. remote truth - a track already present in the destination playlist (fuzzy-compared) is skipped;
+  1. remote truth - a track already present in the destination (fuzzy-compared) is skipped;
   2. `synced` journal - a track we already added once is not re-added (so a track you later
      delete on one side is not resurrected); `--force` ignores it;
   3. `matches` cache - each song is searched at most once; misses are re-tried only after
@@ -17,11 +17,12 @@ import time
 from dataclasses import dataclass, field
 
 from .db import Database
-from .guard import Stop
+from .guard import AuthExpired, Blocked, QuotaExceeded, Stop
 from .matching import Index, Track, best_match
-from .services import Service
+from .services import LIKED, Service
 
 BATCH = 50
+STOP_KINDS = {QuotaExceeded: "quota", Blocked: "blocked", AuthExpired: "auth"}
 
 
 @dataclass
@@ -29,19 +30,18 @@ class Options:
     threshold: float = 0.8
     allow_approx: bool = False
     retry_missing_days: float = 14
-    dry_run: bool = False
     force: bool = False
-    only: list[str] | None = None
 
 
 @dataclass
 class Report:
     added: dict[str, int] = field(default_factory=dict)
-    missing: list[str] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)  # songs searched for this pass and not found
     approx: list[str] = field(default_factory=list)
     skipped_removed: int = 0
     errors: list[str] = field(default_factory=list)
     stopped: str | None = None
+    stop_kind: str | None = None  # quota | blocked | auth
 
     def summary(self) -> dict:
         return {
@@ -62,7 +62,7 @@ def queries(t: Track) -> list[str]:
     return qs
 
 
-def resolve(src: Track, dst: Service, db: Database, opt: Options, report: Report):
+def resolve(src: Track, dst: Service, db: Database, opt: Options, report: Report, title: str):
     """-> (dst_track_id, approx) or None. Searches the destination at most once per song."""
     row = db.get_match(dst.name, src.key)
     if row:
@@ -91,6 +91,7 @@ def resolve(src: Track, dst: Service, db: Database, opt: Options, report: Report
         db.put_match(dst.name, src.key, src.label, m.track.id, m.score, "approx" if m.approx else "matched")
         return m.track.id, m.approx
     db.put_match(dst.name, src.key, src.label, None, 0.0, "missing")
+    report.missing.append(f"[{title}] not on {dst.name}: {src.label}")
     return None
 
 
@@ -105,9 +106,8 @@ def _push(src_tracks, existing, dst, dst_pid, title, pkey, db, opt, report) -> s
         if not opt.force and dst_pid and db.was_synced(pkey, dst.name, t.key):
             report.skipped_removed += 1  # we added it before; someone removed it. Respect that.
             continue
-        r = resolve(t, dst, db, opt, report)
+        r = resolve(t, dst, db, opt, report, title)
         if r is None:
-            report.missing.append(f"[{title}] not on {dst.name}: {t.label}")
             continue
         did, approx = r
         if did in have_ids:
@@ -119,9 +119,6 @@ def _push(src_tracks, existing, dst, dst_pid, title, pkey, db, opt, report) -> s
     if not todo:
         return dst_pid
     label = f"{title} -> {dst.name}"
-    if opt.dry_run:
-        report.added[label] = len(todo)
-        return dst_pid
     try:
         if dst_pid is None:
             dst_pid = dst.create_playlist(title)
@@ -138,30 +135,35 @@ def _push(src_tracks, existing, dst, dst_pid, title, pkey, db, opt, report) -> s
     return dst_pid
 
 
-def sync_playlists(a: Service, b: Service, db: Database, opt: Options | None = None, log=print) -> Report:
+def sync_once(a: Service, b: Service, db: Database, opt: Options | None = None, log=lambda *_: None) -> Report:
+    """One pass; `a` is YouTube Music, `b` is Tidal. Never raises for a stop: see Report.stopped / stop_kind."""
     opt = opt or Options()
     report, run_id = Report(), db.start_run()
     try:
         pa, pb = a.playlists(), b.playlists()
         by_a = {k.casefold(): (k, v) for k, v in pa.items()}
         by_b = {k.casefold(): (k, v) for k, v in pb.items()}
-        names = sorted(set(by_a) | set(by_b))
-        if opt.only:
-            wanted = {o.casefold() for o in opt.only}
-            names = [n for n in names if n in wanted]
-        for n in names:
+        entries = [(LIKED, "Liked songs", LIKED, LIKED)]  # the library first, then the playlists
+        for n in sorted(set(by_a) | set(by_b)):
             title = (by_a.get(n) or by_b.get(n))[0]
-            ida = by_a.get(n, (None, None))[1]
-            idb = by_b.get(n, (None, None))[1]
+            entries.append((n, title, by_a.get(n, (None, None))[1], by_b.get(n, (None, None))[1]))
+        for key, title, ida, idb in entries:
             log(f"• {title}")
-            db.upsert_playlist(n, title, ida, idb)  # a = YouTube Music, b = Tidal
-            ta = a.tracks(ida) if ida else []
-            tb = b.tracks(idb) if idb else []
-            # both directions use the *pre-sync* lists, so tracks never ping-pong
-            idb = _push(ta, tb, b, idb, title, n, db, opt, report)
-            ida = _push(tb, ta, a, ida, title, n, db, opt, report)
+            try:
+                if key != LIKED:
+                    db.upsert_playlist(key, title, ida, idb)
+                ta = a.tracks(ida) if ida else []
+                tb = b.tracks(idb) if idb else []
+                # both directions use the *pre-sync* lists, so tracks never ping-pong
+                idb = _push(ta, tb, b, idb, title, key, db, opt, report)
+                ida = _push(tb, ta, a, ida, title, key, db, opt, report)
+            except Stop:
+                raise
+            except Exception as e:  # one broken playlist must not end the pass
+                report.errors.append(f"[{title}] {e}")
     except Stop as e:
         report.stopped = str(e)
+        report.stop_kind = STOP_KINDS.get(type(e))
     finally:
         db.finish_run(run_id, report.summary())
     return report

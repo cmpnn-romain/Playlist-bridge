@@ -6,7 +6,8 @@ import pytest
 from playlist_bridge.db import Database
 from playlist_bridge.guard import AuthExpired, Blocked, Guard, QuotaExceeded
 from playlist_bridge.matching import Index, Track, best_match, norm, version_tags
-from playlist_bridge.sync import Options, sync_playlists
+from playlist_bridge.services import LIKED
+from playlist_bridge.sync import Options, sync_once
 
 
 def T(svc, id, title, artists, dur=200, album=None, ok=True):
@@ -202,10 +203,10 @@ class Fake:
         self.fail_add = None
 
     def playlists(self):
-        return {k: k for k in self.pls}
+        return {k: k for k in self.pls if k != LIKED}
 
     def tracks(self, pid):
-        return list(self.pls[pid])
+        return list(self.pls.get(pid, []))
 
     def search(self, q):
         self.searches += 1
@@ -220,7 +221,7 @@ class Fake:
             raise self.fail_add
         self.added.append((pid, list(ids)))
         for i in ids:
-            self.pls[pid].append(next(c for c in self.catalog if c.id == i))
+            self.pls.setdefault(pid, []).append(next(c for c in self.catalog if c.id == i))
 
 
 def world():
@@ -236,7 +237,7 @@ def world():
 
 
 def run(a, b, db, **kw):
-    return sync_playlists(a, b, db, Options(**kw), log=lambda *_: None)
+    return sync_once(a, b, db, Options(**kw))
 
 
 def test_bidirectional_create_and_fuzzy_dedupe(tmp_path):
@@ -282,12 +283,12 @@ def test_user_removed_track_not_resurrected_unless_force(tmp_path):
     assert ("Mix", ["b1"]) in b.added
 
 
-def test_dry_run_adds_nothing_but_run_still_recorded(tmp_path):
+def test_every_run_is_recorded(tmp_path):
     a, b = world()
     db = Database(tmp_path / "d.db")
-    r = run(a, b, db, dry_run=True)
-    assert b.added == [] and r.added
-    assert db.last_runs()
+    run(a, b, db)
+    run(a, b, db)
+    assert len(db.last_runs()) == 2
 
 
 # ---------- missing content / regional ----------
@@ -301,7 +302,7 @@ def test_missing_cached_then_retried_after_window(tmp_path):
     assert b.searches == 2  # cached miss: no new requests
     run(a, b, db, retry_missing_days=0)
     assert b.searches == 4  # window elapsed -> asked again
-    assert db.missing()
+    assert db.match_counts().get("missing") == 1
 
 
 def test_region_blocked_counts_as_missing(tmp_path):
@@ -344,7 +345,7 @@ def test_quota_stop_saves_progress_and_resumes(tmp_path):
 
     b.search = limited
     r = run(a, b, db)
-    assert r.stopped and "budget" in r.stopped
+    assert r.stopped and "budget" in r.stopped and r.stop_kind == "quota"
     assert db.match_counts().get("matched") == 3  # progress persisted
 
     budget["n"] = 100
@@ -373,7 +374,7 @@ def test_blocked_mid_add_keeps_journal_of_completed_batches(tmp_path, monkeypatc
     b.add = add
     db = Database(tmp_path / "d.db")
     r = run(a, b, db)
-    assert r.stopped and len(b.added) == 1  # first batch done
+    assert r.stopped and r.stop_kind == "blocked" and len(b.added) == 1  # first batch done
     b.add = orig
     b.pls["P"] = b.pls["P"][:2]
     run(a, b, db)
@@ -385,3 +386,34 @@ def test_add_failure_reported_not_fatal(tmp_path):
     b.fail_add = RuntimeError("not your playlist")
     r = run(a, b, Database(tmp_path / "d.db"))
     assert r.errors and not r.stopped
+
+
+# ---------- the library: liked songs ----------
+def test_liked_songs_sync_both_ways_and_are_idempotent(tmp_path):
+    a = Fake("ytm", {}, [T("ytm", "a9", "Beta", ["Y"])])
+    b = Fake("tidal", {}, [T("tidal", "b8", "Alpha", ["X"])])
+    a.pls[LIKED] = [T("ytm", "a1", "Alpha", ["X"])]
+    b.pls[LIKED] = [T("tidal", "b2", "Beta", ["Y"])]
+    db = Database(tmp_path / "d.db")
+    r = run(a, b, db)
+    assert (LIKED, ["b8"]) in b.added and (LIKED, ["a9"]) in a.added
+    assert "Liked songs -> tidal" in r.added and "Liked songs -> ytm" in r.added
+    again = run(a, b, db)
+    assert again.added == {}
+
+
+def test_a_broken_playlist_does_not_end_the_pass(tmp_path):
+    a, b = world()
+    real = a.tracks
+    a.tracks = lambda pid: (_ for _ in ()).throw(RuntimeError("boom")) if pid == "Mix" else real(pid)
+    r = run(a, b, Database(tmp_path / "d.db"))
+    assert any("boom" in e for e in r.errors)
+    assert ("OnlyA", ["b2"]) in b.added  # the next playlist was still synced
+
+
+def test_missing_is_reported_once_not_every_pass(tmp_path):
+    a = Fake("ytm", {"P": [T("ytm", "a1", "Ghost", ["Nobody"])]}, [])
+    b = Fake("tidal", {"P": []}, [])
+    db = Database(tmp_path / "d.db")
+    assert len(run(a, b, db).missing) == 1
+    assert run(a, b, db).missing == []  # cached: a daemon must not repeat the same line forever
