@@ -1,6 +1,6 @@
 [project]
 name = "playlist-bridge"
-version = "0.1.5" # the single source of truth: strict MAJOR.MINOR.PATCH (docs/VERSIONING.md)
+version = "0.1.6" # the single source of truth: strict MAJOR.MINOR.PATCH (docs/VERSIONING.md)
 description = "Sync playlists between YouTube Music and Tidal"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
