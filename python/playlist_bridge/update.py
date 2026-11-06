@@ -108,8 +108,8 @@ def update(
         if autostart.refresh(python=python, directory=unit_directory, run=run):
             say("The background sync was restarted on the new version.")
         else:
-            say("If `playlist-bridge sync` is running in a terminal, stop it and start it again to use the new version.")
+            say("If `playlist-bridge --sync` is running in a terminal, stop it and start it again to use the new version.")
     except (subprocess.CalledProcessError, SystemExit) as e:
-        say(f"Updated, but the background sync could not be restarted: {e}. Run `playlist-bridge install` to fix it.")
+        say(f"Updated, but the background sync could not be restarted: {e}. Run `playlist-bridge --install` to fix it.")
         return 1
     return 0

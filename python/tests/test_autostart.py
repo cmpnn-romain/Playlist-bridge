@@ -20,7 +20,7 @@ class Recorder:
 
 def test_unit_runs_this_python_and_never_restarts_on_login_errors():
     u = autostart.unit_text("/opt/pb venv/bin/python", "/data/pb")
-    assert 'ExecStart="/opt/pb venv/bin/python" -m playlist_bridge sync' in u
+    assert 'ExecStart="/opt/pb venv/bin/python" -m playlist_bridge --sync' in u
     assert f"RestartPreventExitStatus={EXIT_LOGIN}" in u
     assert 'Environment="PLAYLIST_BRIDGE_HOME=/data/pb"' in u
     assert "StartLimitBurst" in u  # a crash can't turn into a restart storm
@@ -87,8 +87,8 @@ def test_cli_install_needs_both_logins_first(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "HOME", tmp_path)
     monkeypatch.setattr(cli, "YTM_AUTH", tmp_path / "ytm.json")
     monkeypatch.setattr(cli, "TIDAL_AUTH", tmp_path / "tidal.json")
-    assert cli.main(["install"]) == EXIT_LOGIN
-    assert "playlist-bridge login" in capsys.readouterr().err
+    assert cli.main(["--install"]) == EXIT_LOGIN
+    assert "playlist-bridge --login" in capsys.readouterr().err
 
 
 def test_status_command_is_gone():

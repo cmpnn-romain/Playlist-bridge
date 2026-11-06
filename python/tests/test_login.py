@@ -131,7 +131,7 @@ def test_ytm_headers_that_do_not_log_in_are_rejected_and_not_kept(tmp_path):
 
     with pytest.raises(SystemExit) as e:
         login_ytm(p, read=reader(FIREFOX, FIREFOX, FIREFOX), check=check, say=said.append)
-    assert "playlist-bridge login" in str(e.value) and not p.exists()
+    assert "playlist-bridge --login" in str(e.value) and not p.exists()
     assert sum("✗" in m for m in said) == 3 and any("401" in m for m in said)
 
 
@@ -172,7 +172,7 @@ def test_login_all_goes_ytm_then_tidal(tmp_path, monkeypatch):
     monkeypatch.setattr(login, "login_tidal", lambda p, say: order.append("tidal"))
     said = []
     login_all(tmp_path / "a", tmp_path / "b", say=said.append)
-    assert order == ["ytm", "tidal"] and "playlist-bridge sync" in said[-1]
+    assert order == ["ytm", "tidal"] and "playlist-bridge --sync" in said[-1]
 
 
 # ---------- "Copy as cURL" and pasting the wrong thing ----------

@@ -158,7 +158,7 @@ def login_ytm(path: Path, *, read=None, check=None, say=print, attempts: int = 3
             continue
         say("\n✓ YouTube Music is connected.\n")
         return
-    raise SystemExit("YouTube Music login failed. Run `playlist-bridge login` to try again.")
+    raise SystemExit("YouTube Music login failed. Run `playlist-bridge --login` to try again.")
 
 
 def login_tidal(path: Path, *, say=print, session_factory=None) -> None:
@@ -189,4 +189,4 @@ def login_all(ytm_path: Path, tidal_path: Path, say=print) -> None:
     say("Connecting your two accounts. You only do this once.\n")
     login_ytm(ytm_path, say=say)
     login_tidal(tidal_path, say=say)
-    say("All set. Start syncing with:  playlist-bridge sync")
+    say("All set. Start syncing with:  playlist-bridge --sync")

@@ -19,7 +19,7 @@ and release system as Unplug (`~/Unplug`, <https://github.com/cmpnn-romain/Unplu
 | `python/playlist_bridge/update.py` | `update`: shallow-clones `main` to a temp folder, pip-installs it over the current install (twice: `--no-deps --force-reinstall`, then for new dependencies), records the commit in `installed-commit`, restarts the background service on the new code |
 | `python/playlist_bridge/uninstall.py` | `uninstall`: confirms, removes the service, deletes only the files in `files.OWN_FILES`, then removes the program itself (pipx or pip) |
 | `python/playlist_bridge/files.py` | the names of the files kept in `~/.config/playlist-bridge` and the run lock |
-| `python/playlist_bridge/cli.py` | `login` (both services), `sync` (for ever, or `--once`), `install`, `stop`, `update`, `uninstall`, `reset-cooldown`; the run lock; exit codes (0 ok, 1 failed, 2 stopped early, 3 login needed) |
+| `python/playlist_bridge/cli.py` | the actions as flags: `--login`, `--sync` (for ever, or with `--once`), `--install`, `--stop`, `--update`, `--uninstall`, `--reset-cooldown` (the old bare words still work, for existing service files); the run lock; exit codes (0 ok, 1 failed, 2 stopped early, 3 login needed) |
 | `python/tests/` | the tests; fake services only, no network |
 | `tools/` | `Build-Release.ps1`, `Test-VersionPolicy.ps1`, `New-ReleaseNotes.ps1` |
 
@@ -46,7 +46,7 @@ are generated from `feat`/`fix`/`perf`/`refactor` titles. See `docs/VERSIONING.m
 - ytmusicapi only understands `Header: value` lines, so `login.curl_to_headers` turns a pasted "Copy as cURL" (the option people pick first, and the one the steps name) into those lines, including bash's `$'...'` quoting. Keep the steps in step with what the browsers offer. The pasted text holds cookies: never echo, log or print it.
 - `update` follows `main` (there are no releases yet), never installs over a checkout, and must leave the current install untouched when anything fails; it never waits for a password (`GIT_TERMINAL_PROMPT=0`). `PLAYLIST_BRIDGE_REPO` overrides the address (private forks, SSH).
 - `uninstall` deletes files by name from `files.OWN_FILES`, never the folder: `PLAYLIST_BRIDGE_HOME` can point anywhere. A new file kept there must be added to that list.
-- `sync --force` is refused without `--once`, since it would re-add removed tracks at every pass.
+- `--sync --force` is refused without `--once`, since it would re-add removed tracks at every pass.
 - Every network call goes through `Guard.call`, so the pacing, the budget and the cooldown always apply. A new call that skips it can get the user's IP blocked.
 - Tests must stay offline: use the fakes in `python/tests/test_sync.py`, and inject `sleep` / `clock` into `Guard` so nothing really waits.
 - A song is matched on title, artist and duration, since the services share no id. Raising the default threshold loses songs, lowering it adds wrong ones.

@@ -6,7 +6,7 @@ What keeps the IP out of trouble:
   * after a pass stopped by the daily budget, the next pass waits for the next UTC day, plus a random delay;
   * after a pass stopped because a service asked us to slow down, it waits until the stored cooldown is over, plus a random delay;
   * a pass that crashes (network down...) is retried with a growing, jittered delay, never in a tight loop;
-  * expired credentials end the program: nothing can fix them but the user (`playlist-bridge login`).
+  * expired credentials end the program: nothing can fix them but the user (`playlist-bridge --login`).
 """
 
 from __future__ import annotations

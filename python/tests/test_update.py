@@ -2,6 +2,8 @@
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from playlist_bridge import autostart, cli
 from playlist_bridge import update as upd
 from playlist_bridge.files import COMMIT_FILE
@@ -133,7 +135,7 @@ def test_the_background_service_moves_to_the_new_version(tmp_path):
     assert code == 0
     assert run.kinds()[-2:] == ["service-install", "systemctl restart " + autostart.UNIT]
     install = next(c for c in run.calls if "playlist_bridge" in c)
-    assert install == ["/venv/bin/python", "-m", "playlist_bridge", "install"]  # the NEW code writes the new unit
+    assert install == ["/venv/bin/python", "-m", "playlist_bridge", "--install"]  # the NEW code writes the new unit
     assert any("background sync was restarted" in m for m in said)
 
 
@@ -141,7 +143,7 @@ def test_a_service_that_cannot_restart_is_reported_but_the_update_stays(tmp_path
     autostart.install(python="/venv/bin/python", directory=tmp_path / "units", run=Runner(), say=lambda m: None)
     code, said, _ = go(tmp_path, run=Runner(install_fails=True))
     assert code == 1 and (tmp_path / COMMIT_FILE).exists()
-    assert any("could not be restarted" in m and "playlist-bridge install" in m for m in said)
+    assert any("could not be restarted" in m and "playlist-bridge --install" in m for m in said)
 
 
 def test_checkout_detection():
@@ -155,7 +157,7 @@ def test_checkout_detection():
 def test_cli_has_an_update_command(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "HOME", tmp_path)
     monkeypatch.setattr(upd, "update", lambda home: 7)
-    assert cli.main(["update"]) == 7
+    assert cli.main(["--update"]) == 7
 
 
 def test_uninstall_also_removes_the_remembered_commit(tmp_path):
@@ -172,3 +174,13 @@ def test_the_reason_is_the_line_that_says_what_is_wrong():
         "No matching distribution found for x"
     )
     assert upd._reason(subprocess.CalledProcessError(2, "x", stderr="")) == "exit code 2"
+
+
+def test_the_actions_are_flags_and_the_old_words_still_work(monkeypatch):
+    from playlist_bridge import cli
+    from playlist_bridge import update as upd
+
+    monkeypatch.setattr(upd, "update", lambda home: 5)
+    assert cli.main(["--update"]) == 5 and cli.main(["update"]) == 5  # old service files and old `update` pass the bare word
+    with pytest.raises(SystemExit):
+        cli.main([])

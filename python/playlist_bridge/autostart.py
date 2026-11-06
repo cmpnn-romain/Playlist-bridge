@@ -26,7 +26,7 @@ StartLimitIntervalSec=3600
 StartLimitBurst=3
 
 [Service]
-ExecStart="{python}" -m playlist_bridge sync
+ExecStart="{python}" -m playlist_bridge --sync
 {env}Restart=on-failure
 RestartSec=900
 RestartPreventExitStatus={EXIT_LOGIN}
@@ -42,7 +42,7 @@ def _systemctl(run, *args: str):
     except FileNotFoundError:
         raise SystemExit(
             "systemctl not found: `install` needs Linux with systemd (on WSL, enable it in /etc/wsl.conf). "
-            "Run `playlist-bridge sync` in a terminal instead."
+            "Run `playlist-bridge --sync` in a terminal instead."
         ) from None
     except subprocess.CalledProcessError as e:
         raise SystemExit(f"systemctl --user {' '.join(args)} failed: {(e.stderr or '').strip()}") from None
@@ -62,7 +62,7 @@ def stop(*, directory: Path | None = None, run=subprocess.run, say=print):
     """Stop the background sync now and do not start it at the next login. `install` turns it on again."""
     if (directory or unit_dir()).joinpath(UNIT).exists():
         _systemctl(run, "disable", "--now", UNIT)
-        say("Playlist-bridge stopped, and will not start at login. Run `playlist-bridge install` to turn it on again.")
+        say("Playlist-bridge stopped, and will not start at login. Run `playlist-bridge --install` to turn it on again.")
     else:
         say("Playlist-bridge is not set up to run in the background.")
 
@@ -80,6 +80,6 @@ def refresh(*, python: str = sys.executable, directory: Path | None = None, run=
     """After an update: if the background service is set up, rewrite its unit with the NEW code and restart it. True if it did."""
     if not (directory or unit_dir()).joinpath(UNIT).exists():
         return False
-    run([python, "-m", "playlist_bridge", "install"], check=True, capture_output=True, text=True)  # the new program writes the new unit
+    run([python, "-m", "playlist_bridge", "--install"], check=True, capture_output=True, text=True)  # the new program writes the new unit
     _systemctl(run, "restart", UNIT)
     return True

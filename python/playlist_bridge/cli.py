@@ -15,6 +15,7 @@ from .files import DB_FILE, TIDAL_FILE, YTM_FILE, run_lock
 from .guard import EXIT_LOGIN, Guard
 from .sync import Options, sync_once
 
+LEGACY = ("login", "sync", "install", "stop", "update", "uninstall", "reset-cooldown")
 HOME = Path(os.environ.get("PLAYLIST_BRIDGE_HOME", Path.home() / ".config" / "playlist-bridge"))
 YTM_AUTH = HOME / YTM_FILE
 TIDAL_AUTH = HOME / TIDAL_FILE
@@ -48,13 +49,26 @@ def print_report(r):
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in LEGACY:  # `playlist-bridge --sync` (old units, old `update`) still works
+        argv[0] = "--" + argv[0]
     p = argparse.ArgumentParser(prog="playlist-bridge")
     p.add_argument("--version", action="version", version=f"playlist-bridge {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True)
-
-    sub.add_parser("login", help="log in to YouTube Music, then to Tidal")
-
-    sy = sub.add_parser("sync", help="keep the two libraries in step, for ever (liked songs and playlists, both ways, additive only)")
+    act = p.add_mutually_exclusive_group(required=True)
+    for name, text in (
+        ("login", "log in to YouTube Music, then to Tidal"),
+        ("sync", "keep the two libraries in step, for ever (liked songs and playlists, both ways, additive only)"),
+        ("install", "run --sync in the background, now and at every login (Linux, systemd)"),
+        ("stop", "stop the background sync, and do not start it at login"),
+        ("update", "install the latest version from GitHub"),
+        ("uninstall", "remove everything: the background sync, your logins and data, and the program itself"),
+    ):
+        act.add_argument(f"--{name}", dest="cmd", action="store_const", const=name, help=text)
+    act.add_argument(
+        "--reset-cooldown", dest="reset", choices=["ytm", "tidal"], metavar="{ytm,tidal}", help="clear a rate-limit cooldown early"
+    )
+    sy = p
+    sy.add_argument("--yes", "-y", action="store_true", help="with --uninstall: do not ask for confirmation")
     sy.add_argument(
         "--interval-hours",
         type=float,
@@ -82,16 +96,9 @@ def main(argv=None):
     )
     sy.add_argument("--min-interval", type=float, default=1.2, help="minimum seconds between requests, plus random jitter (default 1.2)")
 
-    sub.add_parser("install", help="run sync in the background, now and at every login (Linux, systemd)")
-    sub.add_parser("update", help="install the latest version from GitHub")
-    sub.add_parser("stop", help="stop the background sync, and do not start it at login")
-    un = sub.add_parser("uninstall", help="remove everything: the background sync, your logins and data, and the program itself")
-    un.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
-
-    rc = sub.add_parser("reset-cooldown", help="clear a rate-limit cooldown early")
-    rc.add_argument("service", choices=["ytm", "tidal"])
-
     args = p.parse_args(argv)
+    if args.reset:
+        args.cmd = "reset-cooldown"
     HOME.mkdir(parents=True, exist_ok=True)
 
     if args.cmd == "login":
@@ -114,7 +121,7 @@ def main(argv=None):
         if args.cmd == "stop":
             autostart.stop()
         elif not (YTM_AUTH.exists() and TIDAL_AUTH.exists()):
-            print("Log in first: playlist-bridge login", file=sys.stderr)
+            print("Log in first: playlist-bridge --login", file=sys.stderr)
             return EXIT_LOGIN
         else:
             autostart.install(home=os.environ.get("PLAYLIST_BRIDGE_HOME"))
@@ -122,7 +129,7 @@ def main(argv=None):
 
     db = Database(DB_PATH)
     if args.cmd == "reset-cooldown":
-        db.clear_cooldown(args.service)
+        db.clear_cooldown(args.reset)
         return 0
 
     if args.force and not args.once:

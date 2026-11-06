@@ -25,7 +25,7 @@ _YTM_SYSTEM_PLAYLISTS = {"LM", "SE"}  # "Your Likes" and "Episodes for later" ar
 
 
 def need_login(message: str):
-    """Exit with code 3: only the user can fix this (`playlist-bridge login`), so a supervisor must not restart us."""
+    """Exit with code 3: only the user can fix this (`playlist-bridge --login`), so a supervisor must not restart us."""
     print(message, file=sys.stderr)
     raise SystemExit(EXIT_LOGIN)
 
@@ -47,7 +47,7 @@ class YTMusic:
         from ytmusicapi import YTMusic as _YTM
 
         if not auth_file.exists():
-            need_login(f"{auth_file} not found. Run `playlist-bridge login` first.")
+            need_login(f"{auth_file} not found. Run `playlist-bridge --login` first.")
         self.api, self.g = _YTM(str(auth_file)), guard
 
     @staticmethod
@@ -101,10 +101,10 @@ class Tidal:
         self.tidalapi, self.g = tidalapi, guard
         self.session = tidalapi.Session()
         if not auth_file.exists():
-            need_login(f"{auth_file} not found. Run `playlist-bridge login` first.")
+            need_login(f"{auth_file} not found. Run `playlist-bridge --login` first.")
         d = json.loads(auth_file.read_text())
         if not self.session.load_oauth_session(d["token_type"], d["access_token"], d.get("refresh_token")):
-            need_login("Tidal session expired. Run `playlist-bridge login`.")
+            need_login("Tidal session expired. Run `playlist-bridge --login`.")
         save_tidal_session(self.session, auth_file)  # persist refreshed token
 
     @staticmethod

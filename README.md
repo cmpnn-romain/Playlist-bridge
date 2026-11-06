@@ -38,25 +38,24 @@ reason to block you, and you can stop it and start it again at any time.
 ### Installation
 
 ```bash
-git clone git@github.com:cmpnn-romain/Playlist-bridge.git
-pipx install ./Playlist-bridge/python
+pipx install "git+https://github.com/cmpnn-romain/Playlist-bridge.git#subdirectory=python"
 ```
 
 ## Usage
 
 ```bash
-playlist-bridge login       # YouTube Music, then Tidal
-playlist-bridge sync        # keeps both libraries in step, for ever (Ctrl+C stops it)
-playlist-bridge install     # the same, in the background and at every login (Linux, systemd)
-playlist-bridge stop        # stops the background sync (`install` turns it on again)
-playlist-bridge update      # installs the latest version, and restarts the background sync
-playlist-bridge uninstall   # removes everything: the background sync, your logins and data, and the program itself
+playlist-bridge --login       # YouTube Music, then Tidal
+playlist-bridge --sync        # keeps both libraries in step, for ever (Ctrl+C stops it)
+playlist-bridge --install     # the same, in the background and at every login (Linux, systemd)
+playlist-bridge --stop        # stops the background sync (`--install` turns it on again)
+playlist-bridge --update      # installs the latest version, and restarts the background sync
+playlist-bridge --uninstall   # removes everything: the background sync, your logins and data, and the program itself
 ```
 
 - Your liked songs and playlists (paired by name) are synced both ways. Songs are only added, never removed, and a song you removed is not added back.
-- It syncs every 6 hours or so, slowly and at random times, and waits out any limit or block by itself. If a login stops working, run `playlist-bridge login` again.
+- It syncs every 6 hours or so, slowly and at random times, and waits out any limit or block by itself. If a login stops working, run `playlist-bridge --login` again.
 - Songs with no confident match are reported once, never guessed.
-- On a server or NAS, run `playlist-bridge login` over SSH: the YouTube Music request is copied from a browser on any other device, and the Tidal link is approved on any other device.
+- On a server or NAS, run `playlist-bridge --login` over SSH: the YouTube Music request is copied from a browser on any other device, and the Tidal link is approved on any other device.
 
 ## Credits
 
