@@ -2,38 +2,23 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import os
 import signal
 import sys
 import time
-from contextlib import contextmanager
 from pathlib import Path
 
 from . import __version__
 from .daemon import MIN_INTERVAL_HOURS, run_forever
 from .db import Database
+from .files import DB_FILE, TIDAL_FILE, YTM_FILE, run_lock
 from .guard import EXIT_LOGIN, Guard
 from .sync import Options, sync_once
 
 HOME = Path(os.environ.get("PLAYLIST_BRIDGE_HOME", Path.home() / ".config" / "playlist-bridge"))
-YTM_AUTH = HOME / "ytm_headers.json"
-TIDAL_AUTH = HOME / "tidal_session.json"
-DB_PATH = HOME / "playlist-bridge.db"
-
-
-@contextmanager
-def run_lock():
-    """One run at a time: parallel/overlapping runs look like a bot and double the request rate."""
-    f = open(HOME / "lock", "w")
-    try:
-        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        raise SystemExit("Another playlist-bridge run is in progress.") from None
-    try:
-        yield
-    finally:
-        f.close()
+YTM_AUTH = HOME / YTM_FILE
+TIDAL_AUTH = HOME / TIDAL_FILE
+DB_PATH = HOME / DB_FILE
 
 
 def _ts(t):
@@ -98,7 +83,9 @@ def main(argv=None):
     sy.add_argument("--min-interval", type=float, default=1.2, help="minimum seconds between requests, plus random jitter (default 1.2)")
 
     sub.add_parser("install", help="run sync in the background, now and at every login (Linux, systemd)")
-    sub.add_parser("uninstall", help="stop running sync in the background")
+    sub.add_parser("stop", help="stop the background sync, and do not start it at login")
+    un = sub.add_parser("uninstall", help="remove everything: the background sync, your logins and data, and the program itself")
+    un.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
 
     rc = sub.add_parser("reset-cooldown", help="clear a rate-limit cooldown early")
     rc.add_argument("service", choices=["ytm", "tidal"])
@@ -116,11 +103,15 @@ def main(argv=None):
         print("\nLogged in to both. Now run: playlist-bridge sync")
         return 0
 
-    if args.cmd in ("install", "uninstall"):
+    if args.cmd == "uninstall":
+        from .uninstall import uninstall
+
+        return uninstall(HOME, yes=args.yes)
+    if args.cmd in ("install", "stop"):
         from . import autostart
 
-        if args.cmd == "uninstall":
-            autostart.uninstall()
+        if args.cmd == "stop":
+            autostart.stop()
         elif not (YTM_AUTH.exists() and TIDAL_AUTH.exists()):
             print("Log in first: playlist-bridge login", file=sys.stderr)
             return EXIT_LOGIN
@@ -150,7 +141,7 @@ def main(argv=None):
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, stop)
-    with run_lock():
+    with run_lock(HOME):
         hours = max(args.interval_hours, MIN_INTERVAL_HOURS)
         say(f"Playlist-bridge {__version__}: syncing about every {hours:g} h. Ctrl+C stops; progress is saved.")
         try:

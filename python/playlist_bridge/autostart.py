@@ -58,10 +58,19 @@ def install(*, python: str = sys.executable, home: str | None = None, directory:
     say("To keep it running while you are logged out too: loginctl enable-linger $USER")
 
 
-def uninstall(*, directory: Path | None = None, run=subprocess.run, say=print):
+def stop(*, directory: Path | None = None, run=subprocess.run, say=print):
+    """Stop the background sync now and do not start it at the next login. `install` turns it on again."""
+    if (directory or unit_dir()).joinpath(UNIT).exists():
+        _systemctl(run, "disable", "--now", UNIT)
+        say("Playlist-bridge stopped, and will not start at login. Run `playlist-bridge install` to turn it on again.")
+    else:
+        say("Playlist-bridge is not set up to run in the background.")
+
+
+def remove(*, directory: Path | None = None, run=subprocess.run):
+    """Stop the background sync and delete its service file. Quiet, and harmless when there is nothing to remove."""
     path = (directory or unit_dir()) / UNIT
     if path.exists():
         _systemctl(run, "disable", "--now", UNIT)
         path.unlink()
         _systemctl(run, "daemon-reload")
-    say("Playlist-bridge no longer runs in the background.")

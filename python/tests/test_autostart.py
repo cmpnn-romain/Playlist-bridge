@@ -42,15 +42,31 @@ def test_install_twice_is_harmless(tmp_path):
     assert len(list(tmp_path.iterdir())) == 1
 
 
-def test_uninstall_removes_unit_and_is_harmless_when_absent(tmp_path):
+def test_stop_disables_but_keeps_the_unit_so_install_can_turn_it_on_again(tmp_path):
+    run, said = Recorder(), []
+    autostart.install(python="/py", directory=tmp_path, run=run, say=lambda m: None)
+    run.calls.clear()
+    autostart.stop(directory=tmp_path, run=run, say=said.append)
+    assert run.calls == [["disable", "--now", autostart.UNIT]]
+    assert (tmp_path / autostart.UNIT).exists()
+    assert "install" in said[0]
+
+
+def test_stop_when_never_installed_does_nothing(tmp_path):
+    run, said = Recorder(), []
+    autostart.stop(directory=tmp_path, run=run, say=said.append)
+    assert run.calls == [] and "not set up" in said[0]
+
+
+def test_remove_deletes_the_unit_and_is_harmless_when_absent(tmp_path):
     run = Recorder()
     autostart.install(python="/py", directory=tmp_path, run=run, say=lambda m: None)
     run.calls.clear()
-    autostart.uninstall(directory=tmp_path, run=run, say=lambda m: None)
+    autostart.remove(directory=tmp_path, run=run)
     assert not (tmp_path / autostart.UNIT).exists()
     assert run.calls == [["disable", "--now", autostart.UNIT], ["daemon-reload"]]
     run.calls.clear()
-    autostart.uninstall(directory=tmp_path, run=run, say=lambda m: None)  # nothing to remove
+    autostart.remove(directory=tmp_path, run=run)  # nothing to remove
     assert run.calls == []
 
 

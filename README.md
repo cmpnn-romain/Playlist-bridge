@@ -46,7 +46,9 @@ pipx install playlist_bridge-X.Y.Z-py3-none-any.whl
 ```bash
 playlist-bridge login       # YouTube Music, then Tidal
 playlist-bridge sync        # keeps both libraries in step, for ever (Ctrl+C stops it)
-playlist-bridge install     # the same, in the background and at every login (Linux, systemd); `uninstall` undoes it
+playlist-bridge install     # the same, in the background and at every login (Linux, systemd)
+playlist-bridge stop        # stops the background sync (`install` turns it on again)
+playlist-bridge uninstall   # removes everything: the background sync, your logins and data, and the program itself
 ```
 
 - Your liked songs and playlists (paired by name) are synced both ways. Songs are only added, never removed, and a song you removed is not added back.
