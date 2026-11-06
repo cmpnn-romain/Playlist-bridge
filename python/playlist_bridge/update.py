@@ -5,15 +5,13 @@ from __future__ import annotations
 
 import os
 import re
-import signal
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 from . import __version__, autostart
-from .files import COMMIT_FILE, running_pid
+from .files import COMMIT_FILE, stop_running
 
 REPO = "https://github.com/cmpnn-romain/Playlist-bridge.git"  # PLAYLIST_BRIDGE_REPO overrides it (e.g. an SSH address)
 BRANCH = "main"
@@ -38,23 +36,6 @@ def _reason(e: subprocess.CalledProcessError) -> str:
         if m:
             return m.group(2)
     return lines[-1] if lines else f"exit code {e.returncode}"
-
-
-def stop_running(home: Path, *, say=print, kill=os.kill, sleep=time.sleep, wait: float = 15.0) -> bool:
-    """Stop a sync running in a terminal (SIGTERM: it saves its progress and exits). True if there was one."""
-    pid = running_pid(home)
-    if pid is None:
-        return False
-    try:
-        kill(pid, signal.SIGTERM)
-    except OSError:
-        return False
-    for _ in range(int(wait * 4)):
-        if running_pid(home) is None:
-            break
-        sleep(0.25)
-    say("Stopped the sync that was running in a terminal. Start it again with `playlist-bridge --sync`.")
-    return True
 
 
 def update(

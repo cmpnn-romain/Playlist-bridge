@@ -11,7 +11,7 @@ from pathlib import Path
 from . import __version__
 from .daemon import MIN_INTERVAL_HOURS, run_forever
 from .db import Database
-from .files import DB_FILE, TIDAL_FILE, YTM_FILE, run_lock
+from .files import DB_FILE, TIDAL_FILE, YTM_FILE, run_lock, stop_running
 from .guard import EXIT_LOGIN, Guard
 from .sync import Options, sync_once
 
@@ -124,6 +124,7 @@ def main(argv=None):
             print("Log in first: playlist-bridge --login", file=sys.stderr)
             return EXIT_LOGIN
         else:
+            stop_running(HOME)  # two runs cannot share the lock: a sync left in a terminal would leave the service failing
             autostart.install(home=os.environ.get("PLAYLIST_BRIDGE_HOME"))
         return 0
 

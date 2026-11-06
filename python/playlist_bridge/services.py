@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -48,7 +50,11 @@ class YTMusic:
 
         if not auth_file.exists():
             need_login(f"{auth_file} not found. Run `playlist-bridge --login` first.")
-        self.api, self.g = _YTM(str(auth_file)), guard
+        try:
+            self.api = _YTM(str(auth_file))
+        except Exception as e:  # a damaged file never heals by retrying: only a new login does
+            need_login(f"{auth_file} cannot be used ({type(e).__name__}). Run `playlist-bridge --login`.")
+        self.g = guard
 
     @staticmethod
     def _conv(t: dict) -> Track:
@@ -95,16 +101,24 @@ class YTMusic:
 class Tidal:
     name = "tidal"
 
-    def __init__(self, auth_file: Path, guard: Guard):
+    def __init__(self, auth_file: Path, guard: Guard, *, sleep=time.sleep, retry_wait: float = 30.0):
         import tidalapi
 
         self.tidalapi, self.g = tidalapi, guard
         self.session = tidalapi.Session()
         if not auth_file.exists():
             need_login(f"{auth_file} not found. Run `playlist-bridge --login` first.")
-        d = json.loads(auth_file.read_text())
-        if not self.session.load_oauth_session(d["token_type"], d["access_token"], d.get("refresh_token")):
-            need_login("Tidal session expired. Run `playlist-bridge --login`.")
+        try:
+            d = json.loads(auth_file.read_text())
+            d["token_type"], d["access_token"]
+        except (OSError, ValueError, KeyError, TypeError):
+            need_login(f"{auth_file} cannot be read. Run `playlist-bridge --login`.")
+        args = (d["token_type"], d["access_token"], d.get("refresh_token"))
+        # False also means "Tidal answered with an error" (429, 5xx...), not only "expired": ask once more before giving up for good
+        if not self.session.load_oauth_session(*args):
+            sleep(retry_wait)
+            if not self.session.load_oauth_session(*args):
+                need_login("Tidal session expired. Run `playlist-bridge --login`.")
         save_tidal_session(self.session, auth_file)  # persist refreshed token
 
     @staticmethod
@@ -155,13 +169,9 @@ class Tidal:
 
 
 def save_tidal_session(session, path: Path) -> None:
-    path.write_text(
-        json.dumps(
-            {
-                "token_type": session.token_type,
-                "access_token": session.access_token,
-                "refresh_token": session.refresh_token,
-            }
-        )
-    )
-    path.chmod(0o600)
+    """Written whole or not at all (a stop in the middle must not leave a broken file), and private from the first byte."""
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"token_type": session.token_type, "access_token": session.access_token, "refresh_token": session.refresh_token}, f)
+    os.replace(tmp, path)

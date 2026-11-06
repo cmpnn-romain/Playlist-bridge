@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import autostart
-from .files import OWN_FILES, run_lock
+from .files import OWN_FILES, run_lock, stop_running
 
 PACKAGE = "playlist-bridge"
 
@@ -46,7 +46,8 @@ def uninstall(
     autostart.remove(directory=unit_directory, run=run)
 
     home.mkdir(parents=True, exist_ok=True)
-    with run_lock(home):  # refuses while a sync is running in a terminal
+    stop_running(home, say=say)  # a sync left running in a terminal
+    with run_lock(home):  # still refuses if something else is running
         for name in OWN_FILES:  # only our own files: the folder could be anything the user pointed us at
             (home / name).unlink(missing_ok=True)
     try:

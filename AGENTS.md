@@ -18,7 +18,7 @@ and release system as Unplug (`~/Unplug`, <https://github.com/cmpnn-romain/Unplu
 | `python/playlist_bridge/autostart.py` | `install` / `stop` / `remove`: a systemd user service running `sync`; never restarted after exit code 3 |
 | `python/playlist_bridge/update.py` | `update`: shallow-clones `main` to a temp folder, pip-installs it over the current install (twice: `--no-deps --force-reinstall`, then for new dependencies), records the commit in `installed-commit`, restarts the background service on the new code, or stops a sync left running in a terminal (the pid is in the lock file) |
 | `python/playlist_bridge/uninstall.py` | `uninstall`: confirms, removes the service, deletes only the files in `files.OWN_FILES`, then removes the program itself (pipx or pip) |
-| `python/playlist_bridge/files.py` | the names of the files kept in `~/.config/playlist-bridge` and the run lock |
+| `python/playlist_bridge/files.py` | the names of the files kept in `~/.config/playlist-bridge`, the run lock (it holds the pid), and `stop_running` (used by `--update`, `--install`, `--uninstall` to stop a sync left in a terminal) |
 | `python/playlist_bridge/cli.py` | the actions as flags: `--login`, `--sync` (for ever, or with `--once`), `--install`, `--stop`, `--update`, `--uninstall`, `--reset-cooldown` (the old bare words still work, for existing service files); the run lock; exit codes (0 ok, 1 failed, 2 stopped early, 3 login needed) |
 | `python/tests/` | the tests; fake services only, no network |
 | `tools/` | `Build-Release.ps1`, `Test-VersionPolicy.ps1`, `New-ReleaseNotes.ps1` |

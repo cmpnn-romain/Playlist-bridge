@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import fcntl
 import os
+import signal
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -51,3 +53,20 @@ def running_pid(home: Path) -> int | None:
             except ValueError:
                 return None
         return None  # we got it, so nobody had it
+
+
+def stop_running(home: Path, *, say=print, kill=os.kill, sleep=time.sleep, wait: float = 15.0) -> bool:
+    """Stop a sync running in a terminal (SIGTERM: it saves its progress and exits). True if there was one."""
+    pid = running_pid(home)
+    if pid is None:
+        return False
+    try:
+        kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    for _ in range(int(wait * 4)):
+        if running_pid(home) is None:
+            break
+        sleep(0.25)
+    say("Stopped the sync that was running in a terminal. Start it again with `playlist-bridge --sync`.")
+    return True

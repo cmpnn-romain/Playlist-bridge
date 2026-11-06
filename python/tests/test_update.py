@@ -210,8 +210,7 @@ def test_the_version_file_matches_pyproject():
 
 
 def test_a_sync_running_in_a_terminal_is_stopped_by_the_update(tmp_path):
-    from playlist_bridge.files import run_lock
-    from playlist_bridge.update import stop_running
+    from playlist_bridge.files import run_lock, stop_running
 
     said, sent = [], []
     with run_lock(tmp_path):
@@ -220,7 +219,7 @@ def test_a_sync_running_in_a_terminal_is_stopped_by_the_update(tmp_path):
 
 
 def test_nothing_is_stopped_when_nothing_runs(tmp_path):
-    from playlist_bridge.update import stop_running
+    from playlist_bridge.files import stop_running
 
     assert not stop_running(tmp_path, kill=lambda *a: pytest.fail("killed"), say=lambda m: None)
 
@@ -240,3 +239,76 @@ def test_update_stops_a_terminal_sync_when_there_is_no_service(tmp_path):
     calls = []
     code, said, _ = go(tmp_path, stop_run=lambda home, say: calls.append(home) or True)
     assert code == 0 and calls == [tmp_path]
+
+
+# ---------- credentials files ----------
+def test_a_damaged_tidal_file_means_log_in_again_not_a_crash_loop(tmp_path, monkeypatch):
+    from playlist_bridge import services
+    from playlist_bridge.guard import EXIT_LOGIN
+
+    f = tmp_path / "t.json"
+    f.write_text('{"token_ty')  # cut in the middle
+    with pytest.raises(SystemExit) as e:
+        services.Tidal(f, guard=None)
+    assert e.value.code == EXIT_LOGIN
+
+
+def test_tidal_is_asked_twice_before_it_is_called_expired(tmp_path, monkeypatch):
+    import tidalapi
+
+    from playlist_bridge import services
+    from playlist_bridge.guard import EXIT_LOGIN
+
+    answers = iter([False, True])
+    seen, waits = [], []
+
+    class S:
+        token_type, access_token, refresh_token = "Bearer", "a", "r"
+
+        def load_oauth_session(self, *a):
+            seen.append(a)
+            return next(answers)
+
+    monkeypatch.setattr(tidalapi, "Session", S)
+    f = tmp_path / "t.json"
+    f.write_text('{"token_type": "Bearer", "access_token": "a", "refresh_token": "r"}')
+    services.Tidal(f, guard=None, sleep=waits.append, retry_wait=7)
+    assert len(seen) == 2 and waits == [7]
+
+    answers = iter([False, False])
+    with pytest.raises(SystemExit) as e:
+        services.Tidal(f, guard=None, sleep=lambda s: None)
+    assert e.value.code == EXIT_LOGIN
+
+
+def test_the_tidal_file_is_private_and_replaced_whole(tmp_path):
+    import stat
+    from types import SimpleNamespace
+
+    from playlist_bridge.services import save_tidal_session
+
+    p = tmp_path / "t.json"
+    save_tidal_session(SimpleNamespace(token_type="B", access_token="a", refresh_token="r"), p)
+    assert stat.S_IMODE(p.stat().st_mode) == 0o600 and not (tmp_path / "t.json.tmp").exists()
+    assert '"access_token": "a"' in p.read_text()
+
+
+def test_install_and_uninstall_stop_a_terminal_sync_first(tmp_path, monkeypatch):
+    from playlist_bridge import autostart
+    from playlist_bridge.uninstall import uninstall
+
+    calls = []
+    monkeypatch.setattr(cli, "HOME", tmp_path)
+    monkeypatch.setattr(cli, "YTM_AUTH", tmp_path / "y")
+    monkeypatch.setattr(cli, "TIDAL_AUTH", tmp_path / "t")
+    (tmp_path / "y").write_text("x")
+    (tmp_path / "t").write_text("x")
+    monkeypatch.setattr(cli, "stop_running", lambda home, **kw: calls.append("install"))
+    monkeypatch.setattr(autostart, "install", lambda **kw: None)
+    assert cli.main(["--install"]) == 0 and calls == ["install"]
+
+    from playlist_bridge import uninstall as un
+
+    monkeypatch.setattr(un, "stop_running", lambda home, **kw: calls.append("uninstall"))
+    uninstall(tmp_path, yes=True, run=lambda *a, **k: subprocess.CompletedProcess(a, 0), say=lambda m: None, unit_directory=tmp_path / "u")
+    assert calls == ["install", "uninstall"]
