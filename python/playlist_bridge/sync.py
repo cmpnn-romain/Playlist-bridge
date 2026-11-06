@@ -4,7 +4,7 @@
 Idempotency comes from three layers:
   1. remote truth - a track already present in the destination (fuzzy-compared) is skipped;
   2. `synced` journal - a track we already added once is not re-added (so a track you later
-     delete on one side is not resurrected); `--force` ignores it;
+     delete on one side is not resurrected);
   3. `matches` cache - each song is searched at most once; misses are re-tried only after
      `retry_missing_days` (catalogues and regional licences change).
 Journal rows are written right after each successful batch, so a crash, quota stop or

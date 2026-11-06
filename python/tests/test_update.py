@@ -343,7 +343,6 @@ def _cli_home(tmp_path, monkeypatch, logged_in=True):
 def test_sync_runs_in_the_background_by_default(tmp_path, monkeypatch):
     installed, ran = _cli_home(tmp_path, monkeypatch)
     assert cli.main(["--sync"]) == 0 and len(installed) == 1 and not ran
-    assert installed[0]["args"] == ()
 
 
 def test_the_old_install_name_still_sets_up_the_background_sync(tmp_path, monkeypatch):
@@ -351,19 +350,12 @@ def test_the_old_install_name_still_sets_up_the_background_sync(tmp_path, monkey
     assert cli.main(["--install"]) == 0 and cli.main(["install"]) == 0 and len(installed) == 2 and not ran
 
 
-def test_options_are_passed_on_to_the_background_sync(tmp_path, monkeypatch):
-    installed, _ = _cli_home(tmp_path, monkeypatch)
-    cli.main(["--sync", "--interval-hours", "12", "--allow-approx"])
-    assert installed[0]["args"] == ("--interval-hours", "12", "--allow-approx")
-
-
-def test_foreground_once_and_the_service_itself_run_here(tmp_path, monkeypatch):
+def test_foreground_and_the_service_itself_run_here(tmp_path, monkeypatch):
     installed, ran = _cli_home(tmp_path, monkeypatch)
     cli.main(["--sync", "--foreground"])
-    cli.main(["--sync", "--once"])
     monkeypatch.setenv("INVOCATION_ID", "abc")  # what systemd sets: an old unit runs a bare --sync
     cli.main(["--sync"])
-    assert not installed and len(ran) == 3
+    assert not installed and len(ran) == 2
 
 
 def test_without_systemd_it_runs_in_the_terminal_and_says_so(tmp_path, monkeypatch, capsys):
@@ -392,3 +384,13 @@ def test_install_is_hidden_from_the_help(capsys):
     with pytest.raises(SystemExit):
         cli.main(["--help"])
     assert "--install" not in capsys.readouterr().out
+
+
+def test_the_command_line_has_only_what_the_readme_lists(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    out = capsys.readouterr().out
+    for flag in ("--login", "--sync", "--foreground", "--stop", "--update", "--uninstall", "--help", "--version"):
+        assert flag in out
+    for gone in ("--once", "--force", "--yes", "--threshold", "--interval-hours", "--reset-cooldown", "--install"):
+        assert gone not in out

@@ -35,7 +35,7 @@ def uninstall(
 ) -> int:
     if not yes:
         if not (sys.stdin.isatty() if interactive is None else interactive):
-            say("Not removing anything without a confirmation: run it in a terminal, or add --yes.")
+            say("Not removing anything without a confirmation: run it in a terminal.")
             return 1
         say(f"This stops the background sync, deletes your logins and the sync history in {home}, and uninstalls Playlist-bridge.")
         say("Your music on YouTube Music and Tidal is not touched.")

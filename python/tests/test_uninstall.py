@@ -72,7 +72,7 @@ def test_anything_but_yes_removes_nothing(home, tmp_path, answer):
 def test_without_a_terminal_it_needs_yes(home, tmp_path):
     code, said, run = go(home, tmp_path, interactive=False)
     assert code == 1 and run.calls == [] and (home / OWN_FILES[0]).exists()
-    assert any("--yes" in m for m in said)
+    assert any("terminal" in m for m in said)
 
 
 def test_refuses_while_a_sync_is_running(home, tmp_path):

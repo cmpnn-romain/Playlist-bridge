@@ -16,8 +16,7 @@ def unit_dir() -> Path:
     return Path.home() / ".config" / "systemd" / "user"
 
 
-def unit_text(python: str, home: str | None = None, args: tuple[str, ...] = ()) -> str:
-    extra = "".join(f" {a}" for a in args)
+def unit_text(python: str, home: str | None = None) -> str:
     env = f'Environment="PLAYLIST_BRIDGE_HOME={home}"\n' if home else ""
     return f"""[Unit]
 Description=Playlist-bridge: keeps YouTube Music and Tidal in step
@@ -27,7 +26,7 @@ StartLimitIntervalSec=3600
 StartLimitBurst=3
 
 [Service]
-ExecStart="{python}" -m playlist_bridge --sync --foreground{extra}
+ExecStart="{python}" -m playlist_bridge --sync --foreground
 {env}Restart=on-failure
 RestartSec=900
 RestartPreventExitStatus={EXIT_LOGIN}
@@ -60,7 +59,7 @@ def install(
 ):
     d = directory or unit_dir()
     d.mkdir(parents=True, exist_ok=True)
-    (d / UNIT).write_text(unit_text(python, home, args), encoding="utf-8")
+    (d / UNIT).write_text(unit_text(python, home), encoding="utf-8")
     _systemctl(run, "daemon-reload")
     _systemctl(run, "enable", "--now", UNIT)
     say("Playlist-bridge now syncs in the background, and starts again at every login.")
