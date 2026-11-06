@@ -13,7 +13,7 @@ from pathlib import Path
 from . import __version__
 from .daemon import MIN_INTERVAL_HOURS, run_forever
 from .db import Database
-from .guard import Guard
+from .guard import EXIT_LOGIN, Guard
 from .sync import Options, sync_once
 
 HOME = Path(os.environ.get("PLAYLIST_BRIDGE_HOME", Path.home() / ".config" / "playlist-bridge"))
@@ -42,17 +42,6 @@ def _ts(t):
 
 def say(msg: str):
     print(f"[{_ts(time.time())}] {msg}", flush=True)
-
-
-def cmd_status(db: Database):
-    print("Requests used today:", {s: db.usage(s) for s in ("ytm", "tidal")})
-    for s in ("ytm", "tidal"):
-        cd = db.cooldown(s)
-        if cd:
-            print(f"  {s} COOLING DOWN until {_ts(cd[0])}: {cd[1]}")
-    print("Matches:", db.match_counts() or "none yet")
-    for started, finished, summary in db.last_runs():
-        print(f"  run {_ts(started)} -> {_ts(finished)}: {summary}")
 
 
 def print_report(r):
@@ -108,7 +97,8 @@ def main(argv=None):
     )
     sy.add_argument("--min-interval", type=float, default=1.2, help="minimum seconds between requests, plus random jitter (default 1.2)")
 
-    sub.add_parser("status", help="request budget, cooldowns, match stats")
+    sub.add_parser("install", help="run sync in the background, now and at every login (Linux, systemd)")
+    sub.add_parser("uninstall", help="stop running sync in the background")
 
     rc = sub.add_parser("reset-cooldown", help="clear a rate-limit cooldown early")
     rc.add_argument("service", choices=["ytm", "tidal"])
@@ -126,10 +116,19 @@ def main(argv=None):
         print("\nLogged in to both. Now run: playlist-bridge sync")
         return 0
 
-    db = Database(DB_PATH)
-    if args.cmd == "status":
-        cmd_status(db)
+    if args.cmd in ("install", "uninstall"):
+        from . import autostart
+
+        if args.cmd == "uninstall":
+            autostart.uninstall()
+        elif not (YTM_AUTH.exists() and TIDAL_AUTH.exists()):
+            print("Log in first: playlist-bridge login", file=sys.stderr)
+            return EXIT_LOGIN
+        else:
+            autostart.install(home=os.environ.get("PLAYLIST_BRIDGE_HOME"))
         return 0
+
+    db = Database(DB_PATH)
     if args.cmd == "reset-cooldown":
         db.clear_cooldown(args.service)
         return 0

@@ -43,15 +43,6 @@ class Report:
     stopped: str | None = None
     stop_kind: str | None = None  # quota | blocked | auth
 
-    def summary(self) -> dict:
-        return {
-            "added": self.added,
-            "missing": len(self.missing),
-            "approx": len(self.approx),
-            "errors": len(self.errors),
-            "stopped": self.stopped,
-        }
-
 
 def queries(t: Track) -> list[str]:
     artist = t.artists[0] if t.artists else ""
@@ -138,7 +129,7 @@ def _push(src_tracks, existing, dst, dst_pid, title, pkey, db, opt, report) -> s
 def sync_once(a: Service, b: Service, db: Database, opt: Options | None = None, log=lambda *_: None) -> Report:
     """One pass; `a` is YouTube Music, `b` is Tidal. Never raises for a stop: see Report.stopped / stop_kind."""
     opt = opt or Options()
-    report, run_id = Report(), db.start_run()
+    report = Report()
     try:
         pa, pb = a.playlists(), b.playlists()
         by_a = {k.casefold(): (k, v) for k, v in pa.items()}
@@ -164,6 +155,4 @@ def sync_once(a: Service, b: Service, db: Database, opt: Options | None = None, 
     except Stop as e:
         report.stopped = str(e)
         report.stop_kind = STOP_KINDS.get(type(e))
-    finally:
-        db.finish_run(run_id, report.summary())
     return report

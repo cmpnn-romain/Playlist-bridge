@@ -10,11 +10,12 @@ and release system as Unplug (`~/Unplug`, <https://github.com/cmpnn-romain/Unplu
 | --- | --- |
 | `python/playlist_bridge/matching.py` | the track model and the rules: normalization, soft and hard version tags, scoring, `best_match`, `Index` (is it already in the playlist) |
 | `python/playlist_bridge/guard.py` | every request goes through `Guard.call`: pacing with jitter, the daily budget, backoff on 429 / 5xx / network errors, the circuit breaker and its stored cooldown |
-| `python/playlist_bridge/db.py` | SQLite state: `matches`, `synced` (the journal), `playlists`, `usage`, `cooldown`, `runs` |
+| `python/playlist_bridge/db.py` | SQLite state: `matches`, `synced` (the journal), `playlists`, `usage`, `cooldown` |
 | `python/playlist_bridge/services.py` | `Service` protocol; the ytmusicapi and tidalapi adapters and the two logins |
 | `python/playlist_bridge/sync.py` | `sync_once`, one pass: the liked songs (the `LIKED` pseudo-playlist), then the playlists paired by name; resolves tracks, adds in batches of 50, records each batch |
 | `python/playlist_bridge/daemon.py` | `run_forever`: a pass, then a long random wait; waits for the next UTC day after a quota stop and for the cooldown after a block; retries a crashed pass with a growing delay |
-| `python/playlist_bridge/cli.py` | `login` (both services), `sync` (for ever, or `--once`), `status`, `reset-cooldown`; the run lock; exit codes (0 ok, 1 failed, 2 stopped early, 3 login expired) |
+| `python/playlist_bridge/autostart.py` | `install` / `uninstall`: a systemd user service running `sync`; never restarted after exit code 3 |
+| `python/playlist_bridge/cli.py` | `login` (both services), `sync` (for ever, or `--once`), `install`, `uninstall`, `reset-cooldown`; the run lock; exit codes (0 ok, 1 failed, 2 stopped early, 3 login needed) |
 | `python/tests/` | the tests; fake services only, no network |
 | `tools/` | `Build-Release.ps1`, `Test-VersionPolicy.ps1`, `New-ReleaseNotes.ps1` |
 
@@ -28,7 +29,7 @@ cd python && python -m pip install -e ".[dev]" && ruff format --check . && ruff 
 
 ## Releases and versions
 
-`VERSION` is the single source of truth (strict `MAJOR.MINOR.PATCH`), read by `python/setup.py`. Tag `X.Y.Z` on `main` and push the tag; CI
+The `version` in `python/pyproject.toml` is the single source of truth (strict `MAJOR.MINOR.PATCH`). Tag `X.Y.Z` on `main` and push the tag; CI
 builds and publishes `playlist_bridge-X.Y.Z-py3-none-any.whl`. Do not upload by hand. Commits follow Conventional Commits; the release notes
 are generated from `feat`/`fix`/`perf`/`refactor` titles. See `docs/VERSIONING.md`.
 
@@ -37,10 +38,11 @@ are generated from `feat`/`fix`/`perf`/`refactor` titles. See `docs/VERSIONING.m
 - Never delete anything on either service: the sync only adds. Keep it that way.
 - The loop must stay slow: the interval has a floor (`MIN_INTERVAL_HOURS`) and is randomised, and a failed pass backs off. Never add a tight retry loop.
 - The liked songs are a pseudo-playlist (`LIKED` in `services.py`) so they go through the same matching, journal and batches. YouTube Music has no bulk like: one request per song.
+- Anything that needs the user to log in again must exit with code 3 (`services.need_login`, `EXIT_LOGIN`): the systemd unit does not restart on it, so it cannot retry against the network for ever.
 - `sync --force` is refused without `--once`, since it would re-add removed tracks at every pass.
 - Every network call goes through `Guard.call`, so the pacing, the budget and the cooldown always apply. A new call that skips it can get the user's IP blocked.
 - Tests must stay offline: use the fakes in `python/tests/test_sync.py`, and inject `sleep` / `clock` into `Guard` so nothing really waits.
 - A song is matched on title, artist and duration, since the services share no id. Raising the default threshold loses songs, lowering it adds wrong ones.
-- `setuptools` cannot read files outside `python/` (so `readme` and `license-files` are not set in `pyproject.toml`); `setup.py` reads `../VERSION` itself.
+- `setuptools` cannot read files outside `python/`, so `readme` and `license-files` are not set in `pyproject.toml`.
 - The credentials files are mode 600; never log or print their contents.
 - Text files are LF; no BOM.

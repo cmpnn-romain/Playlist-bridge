@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Protocol
 
@@ -15,12 +16,18 @@ except ImportError:  # older ytmusicapi: the rating is the plain string
         LIKE = "LIKE"
 
 
-from .guard import Guard
+from .guard import EXIT_LOGIN, Guard
 from .matching import Track
 
 # Pseudo-playlist id for the user's liked songs (YouTube Music "Liked Music", Tidal favourites): synced like any playlist.
 LIKED = "library:liked"
 _YTM_SYSTEM_PLAYLISTS = {"LM", "SE"}  # "Your Likes" and "Episodes for later" are not playlists to copy
+
+
+def need_login(message: str):
+    """Exit with code 3: only the user can fix this (`playlist-bridge login`), so a supervisor must not restart us."""
+    print(message, file=sys.stderr)
+    raise SystemExit(EXIT_LOGIN)
 
 
 class Service(Protocol):
@@ -40,7 +47,7 @@ class YTMusic:
         from ytmusicapi import YTMusic as _YTM
 
         if not auth_file.exists():
-            raise SystemExit(f"{auth_file} not found. Run `playlist-bridge login` first.")
+            need_login(f"{auth_file} not found. Run `playlist-bridge login` first.")
         self.api, self.g = _YTM(str(auth_file)), guard
 
     @staticmethod
@@ -94,10 +101,10 @@ class Tidal:
         self.tidalapi, self.g = tidalapi, guard
         self.session = tidalapi.Session()
         if not auth_file.exists():
-            raise SystemExit(f"{auth_file} not found. Run `playlist-bridge login` first.")
+            need_login(f"{auth_file} not found. Run `playlist-bridge login` first.")
         d = json.loads(auth_file.read_text())
         if not self.session.load_oauth_session(d["token_type"], d["access_token"], d.get("refresh_token")):
-            raise SystemExit("Tidal session expired. Run `playlist-bridge login`.")
+            need_login("Tidal session expired. Run `playlist-bridge login`.")
         save_tidal_session(self.session, auth_file)  # persist refreshed token
 
     @staticmethod

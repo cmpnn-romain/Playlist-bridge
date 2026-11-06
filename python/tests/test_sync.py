@@ -283,14 +283,6 @@ def test_user_removed_track_not_resurrected_unless_force(tmp_path):
     assert ("Mix", ["b1"]) in b.added
 
 
-def test_every_run_is_recorded(tmp_path):
-    a, b = world()
-    db = Database(tmp_path / "d.db")
-    run(a, b, db)
-    run(a, b, db)
-    assert len(db.last_runs()) == 2
-
-
 # ---------- missing content / regional ----------
 def test_missing_cached_then_retried_after_window(tmp_path):
     a = Fake("ytm", {"P": [T("ytm", "a1", "Ghost Song", ["Nobody"])]}, [])
@@ -302,7 +294,7 @@ def test_missing_cached_then_retried_after_window(tmp_path):
     assert b.searches == 2  # cached miss: no new requests
     run(a, b, db, retry_missing_days=0)
     assert b.searches == 4  # window elapsed -> asked again
-    assert db.match_counts().get("missing") == 1
+    assert db.get_match("tidal", T("ytm", "a1", "Ghost Song", ["Nobody"]).key).status == "missing"
 
 
 def test_region_blocked_counts_as_missing(tmp_path):
@@ -346,7 +338,7 @@ def test_quota_stop_saves_progress_and_resumes(tmp_path):
     b.search = limited
     r = run(a, b, db)
     assert r.stopped and "budget" in r.stopped and r.stop_kind == "quota"
-    assert db.match_counts().get("matched") == 3  # progress persisted
+    assert db.conn.execute("SELECT COUNT(*) FROM matches WHERE status='matched'").fetchone()[0] == 3  # progress persisted
 
     budget["n"] = 100
     r = run(a, b, db)

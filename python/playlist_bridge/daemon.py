@@ -15,13 +15,14 @@ import random
 import time
 
 from .db import Database
+from .guard import EXIT_LOGIN
 
 SERVICES = ("ytm", "tidal")
 MIN_INTERVAL_HOURS = 1.0
 INTERVAL_JITTER = (0.8, 1.3)  # x the interval
 RETRY_BASE_S = 900  # first retry after a crashed pass: 15 min, then 30, 60... up to RETRY_MAX_S
 RETRY_MAX_S = 4 * 3600
-EXIT_OK, EXIT_FAILED, EXIT_STOPPED, EXIT_AUTH = 0, 1, 2, 3
+EXIT_OK, EXIT_FAILED, EXIT_STOPPED, EXIT_AUTH = 0, 1, 2, EXIT_LOGIN
 
 
 def seconds_to_next_utc_day(now: float) -> float:

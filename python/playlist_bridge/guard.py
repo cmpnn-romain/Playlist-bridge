@@ -18,6 +18,8 @@ import time
 
 from .db import Database
 
+EXIT_LOGIN = 3  # the exit code that means "log in again"
+
 
 class Stop(Exception):
     """Run must stop now; progress is already saved. Resume later."""
@@ -110,8 +112,7 @@ class Guard:
     def _open_breaker(self, seconds: float, why: str):
         self.db.set_cooldown(self.service, self.clock() + seconds, why)
         raise Blocked(
-            f"{self.service}: {why}. Pausing for {int(seconds // 60)} min "
-            f"(see `playlist-bridge status`). Try again later, ideally from a different network if it persists."
+            f"{self.service}: {why}. Pausing for {int(seconds // 60)} min. If it keeps happening, try again from a different network."
         )
 
     def call(self, fn, *args, cost: int = 1, **kwargs):

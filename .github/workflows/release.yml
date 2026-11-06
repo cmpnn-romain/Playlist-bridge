@@ -1,6 +1,6 @@
 name: Release
 
-# A release is a bare X.Y.Z tag on main. The tag must equal VERSION and be a single valid bump of the previous release.
+# A release is a bare X.Y.Z tag on main. The tag must equal the version in python/pyproject.toml and be a single valid bump of the previous release.
 on:
   push:
     tags: ['[0-9]+.[0-9]+.[0-9]+']

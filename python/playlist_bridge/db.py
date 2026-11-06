@@ -7,7 +7,6 @@ committed immediately so a crash / Ctrl-C / quota stop never loses progress.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -29,8 +28,6 @@ CREATE TABLE IF NOT EXISTS usage(
     service TEXT, day TEXT, count INTEGER, PRIMARY KEY(service, day));
 CREATE TABLE IF NOT EXISTS cooldown(
     service TEXT PRIMARY KEY, until REAL, reason TEXT);
-CREATE TABLE IF NOT EXISTS runs(
-    id INTEGER PRIMARY KEY AUTOINCREMENT, started REAL, finished REAL, summary TEXT);
 """
 
 
@@ -82,9 +79,6 @@ class Database:
                 (dst, src_key, label, dst_id, score, status, self.clock()),
             )
 
-    def match_counts(self) -> dict[str, int]:
-        return dict(self.conn.execute("SELECT status, COUNT(*) FROM matches GROUP BY status").fetchall())
-
     # -- sync journal
     def was_synced(self, playlist_key, dst, src_key) -> bool:
         return (
@@ -125,18 +119,3 @@ class Database:
     def clear_cooldown(self, service):
         with self.conn:
             self.conn.execute("DELETE FROM cooldown WHERE service=?", (service,))
-
-    # -- runs
-    def start_run(self) -> int:
-        with self.conn:
-            return self.conn.execute("INSERT INTO runs(started) VALUES(?)", (self.clock(),)).lastrowid
-
-    def finish_run(self, run_id, summary: dict):
-        with self.conn:
-            self.conn.execute(
-                "UPDATE runs SET finished=?, summary=? WHERE id=?",
-                (self.clock(), json.dumps(summary), run_id),
-            )
-
-    def last_runs(self, n=5):
-        return self.conn.execute("SELECT started, finished, summary FROM runs ORDER BY id DESC LIMIT ?", (n,)).fetchall()

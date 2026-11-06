@@ -52,5 +52,4 @@ jobs:
         shell: pwsh
         run: |
           ./tools/Build-Release.ps1 -SkipGates
-          $v = (Get-Content VERSION -TotalCount 1).Trim()
-          if (-not (Test-Path "release/playlist_bridge-$v-py3-none-any.whl")) { throw "wheel missing" }
+          if (-not (Test-Path "release/playlist_bridge-*-py3-none-any.whl")) { throw "wheel missing" }
