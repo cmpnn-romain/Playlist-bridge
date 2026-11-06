@@ -94,13 +94,9 @@ def main(argv=None):
     HOME.mkdir(parents=True, exist_ok=True)
 
     if args.cmd == "login":
-        from .services import login_tidal, login_ytm
+        from .login import login_all
 
-        print("1/2  YouTube Music")
-        login_ytm(YTM_AUTH)
-        print("\n2/2  Tidal")
-        login_tidal(TIDAL_AUTH)
-        print("\nLogged in to both. Now run: playlist-bridge sync")
+        login_all(YTM_AUTH, TIDAL_AUTH)
         return 0
 
     if args.cmd == "uninstall":

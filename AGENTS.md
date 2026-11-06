@@ -11,7 +11,8 @@ and release system as Unplug (`~/Unplug`, <https://github.com/cmpnn-romain/Unplu
 | `python/playlist_bridge/matching.py` | the track model and the rules: normalization, soft and hard version tags, scoring, `best_match`, `Index` (is it already in the playlist) |
 | `python/playlist_bridge/guard.py` | every request goes through `Guard.call`: pacing with jitter, the daily budget, backoff on 429 / 5xx / network errors, the circuit breaker and its stored cooldown |
 | `python/playlist_bridge/db.py` | SQLite state: `matches`, `synced` (the journal), `playlists`, `usage`, `cooldown` |
-| `python/playlist_bridge/services.py` | `Service` protocol; the ytmusicapi and tidalapi adapters and the two logins |
+| `python/playlist_bridge/services.py` | `Service` protocol; the ytmusicapi and tidalapi adapters |
+| `python/playlist_bridge/login.py` | `login`: numbered steps, a hidden paste that ends by itself (`read_pasted`), a check that the headers really log in, the Tidal link |
 | `python/playlist_bridge/sync.py` | `sync_once`, one pass: the liked songs (the `LIKED` pseudo-playlist), then the playlists paired by name; resolves tracks, adds in batches of 50, records each batch |
 | `python/playlist_bridge/daemon.py` | `run_forever`: a pass, then a long random wait; waits for the next UTC day after a quota stop and for the cooldown after a block; retries a crashed pass with a growing delay |
 | `python/playlist_bridge/autostart.py` | `install` / `stop` / `remove`: a systemd user service running `sync`; never restarted after exit code 3 |
@@ -41,6 +42,7 @@ are generated from `feat`/`fix`/`perf`/`refactor` titles. See `docs/VERSIONING.m
 - The loop must stay slow: the interval has a floor (`MIN_INTERVAL_HOURS`) and is randomised, and a failed pass backs off. Never add a tight retry loop.
 - The liked songs are a pseudo-playlist (`LIKED` in `services.py`) so they go through the same matching, journal and batches. YouTube Music has no bulk like: one request per song.
 - Anything that needs the user to log in again must exit with code 3 (`services.need_login`, `EXIT_LOGIN`): the systemd unit does not restart on it, so it cannot retry against the network for ever.
+- ytmusicapi only understands `Header: value` lines ("Copy request headers"), not cURL: keep the login instructions in step with that. The pasted text holds cookies: never echo, log or print it.
 - `uninstall` deletes files by name from `files.OWN_FILES`, never the folder: `PLAYLIST_BRIDGE_HOME` can point anywhere. A new file kept there must be added to that list.
 - `sync --force` is refused without `--once`, since it would re-add removed tracks at every pass.
 - Every network call goes through `Guard.call`, so the pacing, the budget and the cooldown always apply. A new call that skips it can get the user's IP blocked.

@@ -165,26 +165,3 @@ def save_tidal_session(session, path: Path) -> None:
         )
     )
     path.chmod(0o600)
-
-
-def login_tidal(path: Path) -> None:
-    import tidalapi
-
-    s = tidalapi.Session()
-    s.login_oauth_simple()  # prints a link.tidal.com URL to open in the browser
-    if not s.check_login():
-        raise SystemExit("Tidal login failed.")
-    save_tidal_session(s, path)
-    print(f"Saved Tidal credentials to {path}")
-
-
-def login_ytm(path: Path) -> None:
-    import ytmusicapi
-
-    print(
-        "Open music.youtube.com (logged in), DevTools > Network, filter '/browse',\n"
-        "right-click a POST request > Copy as cURL (or copy request headers), paste below."
-    )
-    ytmusicapi.setup(filepath=str(path))
-    path.chmod(0o600)
-    print(f"Saved YouTube Music credentials to {path}")
