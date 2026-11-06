@@ -171,8 +171,11 @@ def test_login_all_goes_ytm_then_tidal(tmp_path, monkeypatch):
     monkeypatch.setattr(login, "login_ytm", lambda p, say: order.append("ytm"))
     monkeypatch.setattr(login, "login_tidal", lambda p, say: order.append("tidal"))
     said = []
-    login_all(tmp_path / "a", tmp_path / "b", say=said.append)
+    cleared = []
+    login_all(tmp_path / "a", tmp_path / "b", say=said.append, clear=lambda: cleared.append(len(said)))
     assert order == ["ytm", "tidal"] and "playlist-bridge --sync" in said[-1]
+    assert said[-3:-1] == ["✓ YouTube Music is connected.", "✓ Tidal is connected."]
+    assert cleared == [1]  # after the two logins (only the intro was said), before the result is shown
 
 
 # ---------- "Copy as cURL" and pasting the wrong thing ----------

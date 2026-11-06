@@ -15,8 +15,7 @@ from . import ui
 YTM_STEPS = """\
 Step 1 of 2: YouTube Music
 
-You do the browser part on any computer you like (it does not have to be this one, so a server or a NAS is fine).
-Only the text you copy has to reach this terminal.
+Follow these steps.
 
   1. Open https://music.youtube.com in a browser and log in to your account.
   2. Right-click an empty part of the page and choose "Inspect". This opens the developer tools (F12 does the same).
@@ -173,10 +172,7 @@ def login_tidal(path: Path, *, say=ui.say, session_factory=None, show_qr=ui.qr, 
     url = link.verification_uri_complete
     if not url.startswith("http"):
         url = "https://" + url
-    say(
-        f"Step 2 of 2: Tidal\n\nOpen this link in a browser on any device (your phone is fine) and approve the login:\n\n    {url}\n\n"
-        f"The link works for {max(1, int(link.expires_in) // 60)} minutes."
-    )
+    say(f"Step 2 of 2: Tidal\n\nFollow this link:\n\n    {url}\n\nThe link works for {max(1, int(link.expires_in) // 60)} minutes.")
     show_qr(url)
     try:
         with waiting("Waiting for you to approve it..."):
@@ -189,8 +185,11 @@ def login_tidal(path: Path, *, say=ui.say, session_factory=None, show_qr=ui.qr, 
     say("\n✓ Tidal is connected.\n")
 
 
-def login_all(ytm_path: Path, tidal_path: Path, say=ui.say) -> None:
+def login_all(ytm_path: Path, tidal_path: Path, say=ui.say, clear=ui.clear) -> None:
     say("Connecting your two accounts. You only do this once.\n")
     login_ytm(ytm_path, say=say)
     login_tidal(tidal_path, say=say)
-    say("All set. Start syncing with:  playlist-bridge --sync")
+    clear()  # the steps and the pastes are done with: leave only the result
+    say("✓ YouTube Music is connected.")
+    say("✓ Tidal is connected.")
+    say("\nAll set. Start syncing with:  playlist-bridge --sync")

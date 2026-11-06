@@ -83,7 +83,9 @@ def say(msg: str = "") -> None:
             )
         )
     elif first.startswith("All set"):
-        console.print(Panel(Text(text, style="bold green"), border_style="green", padding=(0, 2)))
+        box = Text(text, style="bold green")
+        box.highlight_regex(r"playlist-bridge --sync", "bold white")  # the command to copy stays plain
+        console.print(Panel(box, border_style="green", padding=(0, 2)))
     elif first.startswith("✓"):
         console.print(Text(msg.strip("\n"), style="bold green"))
     elif first.startswith("✗"):
@@ -120,6 +122,12 @@ def qr(url: str) -> None:
         console.print(Text.from_ansi(art), end="")
         console.print(Text("Or scan it with your phone.", style="dim"))
         console.print()
+
+
+def clear() -> None:
+    """Wipe the screen (only in a real terminal): used once everything is connected, to leave just the result."""
+    if console.is_terminal:
+        console.clear()
 
 
 def status(message: str):

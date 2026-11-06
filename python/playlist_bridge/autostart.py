@@ -71,7 +71,7 @@ def stop(*, directory: Path | None = None, run=subprocess.run, say=print):
     """Stop the background sync now and do not start it at the next login. `--sync` turns it on again."""
     if (directory or unit_dir()).joinpath(UNIT).exists():
         _systemctl(run, "disable", "--now", UNIT)
-        say("Playlist-bridge stopped, and will not start at login. Run `playlist-bridge --sync` to turn it on again.")
+        say("Playlist-bridge stopped. Run `playlist-bridge --sync` to turn it on again.")
     else:
         say("Playlist-bridge is not set up to run in the background.")
 
